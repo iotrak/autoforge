@@ -8,6 +8,7 @@ defmodule Autoforge.Ai.ToolRegistry do
   """
 
   @max_body_bytes 50_000
+  @max_meta_redirects 3
 
   @doc "Returns all registered tools as a map of name => ReqLLM.Tool."
   @spec all() :: %{String.t() => ReqLLM.Tool.t()}
@@ -46,24 +47,55 @@ defmodule Autoforge.Ai.ToolRegistry do
             url: [type: :string, required: true, doc: "The URL to fetch"]
           ],
           callback: fn %{url: url} ->
-            case Req.get(url, max_retries: 0, receive_timeout: 15_000) do
-              {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
-                text = to_string(body)
-
-                if byte_size(text) > @max_body_bytes do
-                  {:ok, binary_part(text, 0, @max_body_bytes) <> "\n[truncated]"}
-                else
-                  {:ok, text}
-                end
-
-              {:ok, %Req.Response{status: status}} ->
-                {:ok, "HTTP #{status}"}
-
-              {:error, reason} ->
-                {:ok, "Error fetching URL: #{inspect(reason)}"}
-            end
+            fetch_url(url, @max_meta_redirects)
           end
         )
     }
+  end
+
+  defp fetch_url(url, redirects_remaining) do
+    case Req.get(url, max_retries: 2, retry_delay: 500, receive_timeout: 15_000) do
+      {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
+        text = to_string(body)
+
+        case extract_meta_refresh(text, url) do
+          {:redirect, target} when redirects_remaining > 0 ->
+            fetch_url(target, redirects_remaining - 1)
+
+          _ ->
+            if byte_size(text) > @max_body_bytes do
+              {:ok, binary_part(text, 0, @max_body_bytes) <> "\n[truncated]"}
+            else
+              {:ok, text}
+            end
+        end
+
+      {:ok, %Req.Response{status: status}} ->
+        {:ok, "HTTP #{status}"}
+
+      {:error, reason} ->
+        {:ok, "Error fetching URL: #{inspect(reason)}"}
+    end
+  end
+
+  defp extract_meta_refresh(html, base_url) do
+    case Regex.run(
+           ~r/<meta\s[^>]*http-equiv\s*=\s*["']refresh["'][^>]*content\s*=\s*["']\d+;\s*url=([^"']+)["']/i,
+           html
+         ) do
+      [_, relative_url] ->
+        base_uri = URI.parse(base_url)
+
+        base_uri =
+          if String.ends_with?(base_uri.path || "/", "/"),
+            do: base_uri,
+            else: %{base_uri | path: base_uri.path <> "/"}
+
+        target = URI.merge(base_uri, relative_url) |> to_string()
+        {:redirect, target}
+
+      nil ->
+        :none
+    end
   end
 end

@@ -10,5 +10,6 @@ defmodule Autoforge.Chat do
     resource Autoforge.Chat.ConversationParticipant
     resource Autoforge.Chat.ConversationBot
     resource Autoforge.Chat.Message
+    resource Autoforge.Chat.ToolInvocation
   end
 end

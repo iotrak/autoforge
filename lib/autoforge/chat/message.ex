@@ -93,5 +93,7 @@ defmodule Autoforge.Chat.Message do
       allow_nil? true
       attribute_writable? true
     end
+
+    has_many :tool_invocations, Autoforge.Chat.ToolInvocation
   end
 end

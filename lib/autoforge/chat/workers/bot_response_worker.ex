@@ -15,7 +15,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
   use Oban.Worker, queue: :ai, max_attempts: 3
 
   alias Autoforge.Ai.{Bot, ToolResolver}
-  alias Autoforge.Chat.{Conversation, Message}
+  alias Autoforge.Chat.{Conversation, Message, ToolInvocation}
 
   import ReqLLM.Context, only: [user: 1, assistant: 1]
 
@@ -81,20 +81,37 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
       |> maybe_put(:temperature, bot.temperature && Decimal.to_float(bot.temperature))
       |> maybe_put(:max_tokens, bot.max_tokens)
 
-    case run_tool_loop(bot.model, truncated, tools, base_opts, 0) do
-      {:ok, response_text} ->
-        Message
-        |> Ash.Changeset.for_create(
-          :create,
-          %{
-            body: response_text,
-            role: :bot,
-            bot_id: bot.id,
-            conversation_id: conversation.id
-          },
-          authorize?: false
-        )
-        |> Ash.create!()
+    case run_tool_loop(bot.model, truncated, tools, base_opts, 0, []) do
+      {:ok, response_text, invocations} ->
+        message =
+          Message
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              body: response_text,
+              role: :bot,
+              bot_id: bot.id,
+              conversation_id: conversation.id
+            },
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        if invocations != [] do
+          Enum.each(invocations, fn inv ->
+            ToolInvocation
+            |> Ash.Changeset.for_create(:create, Map.put(inv, :message_id, message.id),
+              authorize?: false
+            )
+            |> Ash.create!()
+          end)
+
+          Phoenix.PubSub.broadcast(
+            Autoforge.PubSub,
+            "conversation:#{conversation.id}",
+            {:tool_invocations_saved, message.id}
+          )
+        end
 
         :ok
 
@@ -107,7 +124,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
     end
   end
 
-  defp run_tool_loop(model, messages, tools, opts, round) do
+  defp run_tool_loop(model, messages, tools, opts, round, invocations) do
     call_opts =
       if tools != [] and round < @max_tool_rounds do
         Keyword.put(opts, :tools, tools)
@@ -126,18 +143,62 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
             "Tool calls (round #{round + 1}): #{Enum.map_join(tool_calls, ", ", & &1.function.name)}"
           )
 
-          updated_context =
-            ReqLLM.Context.execute_and_append_tools(response.context, tool_calls, tools)
+          {updated_context, new_invocations} =
+            execute_tool_calls(response.context, tool_calls, tools)
 
-          run_tool_loop(model, updated_context, tools, opts, round + 1)
+          run_tool_loop(
+            model,
+            updated_context,
+            tools,
+            opts,
+            round + 1,
+            invocations ++ new_invocations
+          )
         else
-          {:ok, ReqLLM.Response.text(response) || ""}
+          {:ok, ReqLLM.Response.text(response) || "", invocations}
         end
 
       {:error, reason} ->
         {:error, reason}
     end
   end
+
+  defp execute_tool_calls(context, tool_calls, available_tools) do
+    Enum.reduce(tool_calls, {context, []}, fn tool_call, {ctx, invocations} ->
+      name = tool_call.function.name
+      id = tool_call.id
+      args = Jason.decode!(tool_call.function.arguments)
+
+      {status, result_str, tool_result_msg} =
+        case execute_tool(name, args, available_tools) do
+          {:ok, result} ->
+            {:ok, stringify_result(result), ReqLLM.Context.tool_result_message(name, id, result)}
+
+          {:error, error} ->
+            {:error, stringify_result(error),
+             ReqLLM.Context.tool_result_message(name, id, %{error: to_string(error)})}
+        end
+
+      inv = %{
+        tool_name: name,
+        arguments: args,
+        result: result_str,
+        status: status
+      }
+
+      {ReqLLM.Context.append(ctx, tool_result_msg), [inv | invocations]}
+    end)
+  end
+
+  defp execute_tool(name, args, available_tools) do
+    case Enum.find(available_tools, &(&1.name == name)) do
+      nil -> {:error, "unknown tool: #{name}"}
+      tool -> ReqLLM.Tool.execute(tool, args)
+    end
+  end
+
+  defp stringify_result(result) when is_binary(result), do: result
+  defp stringify_result(result), do: inspect(result, limit: :infinity, printable_limit: 50_000)
 
   defp multi_participant?(conversation) do
     length(conversation.bots) > 1 || length(conversation.participants) > 1

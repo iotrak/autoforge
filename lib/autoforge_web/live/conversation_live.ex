@@ -18,7 +18,7 @@ defmodule AutoforgeWeb.ConversationLive do
     conversation =
       Conversation
       |> Ash.Query.filter(id == ^id)
-      |> Ash.Query.load([:bots, :participants, messages: [:user, :bot]])
+      |> Ash.Query.load([:bots, :participants, messages: [:user, :bot, :tool_invocations]])
       |> Ash.read_one!(actor: user)
 
     case conversation do
@@ -48,6 +48,7 @@ defmodule AutoforgeWeb.ConversationLive do
            message_body: "",
            topic: topic,
            thinking_bots: MapSet.new(),
+           tools_expanded: MapSet.new(),
            context_limit: context_limit,
            context_usage: context_usage,
            bot_info: bot_info
@@ -99,6 +100,20 @@ defmodule AutoforgeWeb.ConversationLive do
   end
 
   @impl true
+  def handle_event("toggle_tools", %{"message-id" => id}, socket) do
+    tools_expanded = socket.assigns.tools_expanded
+
+    tools_expanded =
+      if MapSet.member?(tools_expanded, id) do
+        MapSet.delete(tools_expanded, id)
+      else
+        MapSet.put(tools_expanded, id)
+      end
+
+    {:noreply, assign(socket, tools_expanded: tools_expanded)}
+  end
+
+  @impl true
   def handle_info(
         %Phoenix.Socket.Broadcast{
           event: "create",
@@ -106,11 +121,24 @@ defmodule AutoforgeWeb.ConversationLive do
         },
         socket
       ) do
-    message = Ash.load!(message, [:user, :bot], authorize?: false)
+    message = Ash.load!(message, [:user, :bot, :tool_invocations], authorize?: false)
     messages = socket.assigns.messages ++ [message]
     context_usage = compute_context_usage(messages, socket.assigns.context_limit)
 
     {:noreply, assign(socket, messages: messages, context_usage: context_usage)}
+  end
+
+  def handle_info({:tool_invocations_saved, message_id}, socket) do
+    messages =
+      Enum.map(socket.assigns.messages, fn msg ->
+        if msg.id == message_id do
+          Ash.load!(msg, [:tool_invocations], authorize?: false)
+        else
+          msg
+        end
+      end)
+
+    {:noreply, assign(socket, messages: messages)}
   end
 
   def handle_info({:bot_thinking, bot_id, true}, socket) do
@@ -254,6 +282,11 @@ defmodule AutoforgeWeb.ConversationLive do
                 ]}>
                   {Markdown.to_html(message.body)}
                 </div>
+                <.tool_invocations_panel
+                  :if={message.role == :bot && message.tool_invocations != []}
+                  message={message}
+                  expanded={MapSet.member?(@tools_expanded, message.id)}
+                />
               </div>
             </div>
             <span class={[
@@ -310,6 +343,70 @@ defmodule AutoforgeWeb.ConversationLive do
         </div>
       </div>
     </Layouts.app>
+    """
+  end
+
+  attr :message, :map, required: true
+  attr :expanded, :boolean, required: true
+
+  defp tool_invocations_panel(assigns) do
+    count = length(assigns.message.tool_invocations)
+    assigns = assign(assigns, count: count)
+
+    ~H"""
+    <div class="mt-2 border-t border-base-content/10 pt-2">
+      <button
+        phx-click="toggle_tools"
+        phx-value-message-id={@message.id}
+        class="inline-flex items-center gap-1.5 text-xs text-base-content/60 hover:text-base-content transition-colors cursor-pointer"
+      >
+        <.icon name="hero-wrench-screwdriver" class="w-3.5 h-3.5" />
+        {@count} tool {if(@count == 1, do: "call", else: "calls")}
+        <.icon name={if(@expanded, do: "hero-chevron-up", else: "hero-chevron-down")} class="w-3 h-3" />
+      </button>
+
+      <div :if={@expanded} class="mt-2 space-y-2">
+        <.tool_invocation_row :for={inv <- @message.tool_invocations} inv={inv} />
+      </div>
+    </div>
+    """
+  end
+
+  attr :inv, :map, required: true
+
+  defp tool_invocation_row(assigns) do
+    args_json =
+      case Jason.encode(assigns.inv.arguments, pretty: true) do
+        {:ok, json} -> json
+        _ -> inspect(assigns.inv.arguments)
+      end
+
+    assigns = assign(assigns, args_json: args_json)
+
+    ~H"""
+    <div class="rounded-lg bg-base-200/50 p-2.5 text-xs">
+      <div class="flex items-center gap-2 mb-1.5">
+        <code class="font-mono font-semibold text-base-content/80">{@inv.tool_name}</code>
+        <span class={[
+          "badge badge-xs",
+          if(@inv.status == :ok, do: "badge-success", else: "badge-error")
+        ]}>
+          {@inv.status}
+        </span>
+      </div>
+      <details class="group">
+        <summary class="cursor-pointer text-base-content/50 hover:text-base-content/70 transition-colors select-none">
+          Arguments
+        </summary>
+        <pre class="mt-1 p-2 rounded bg-base-300/50 overflow-x-auto text-[11px] leading-relaxed whitespace-pre-wrap break-all"><code>{@args_json}</code></pre>
+      </details>
+      <details :if={@inv.result} class="group mt-1">
+        <summary class="cursor-pointer text-base-content/50 hover:text-base-content/70 transition-colors select-none">
+          Result
+        </summary>
+        <pre class="mt-1 p-2 rounded bg-base-300/50 overflow-x-auto text-[11px] leading-relaxed whitespace-pre-wrap break-all max-h-48"><code>{@inv.result}</code></pre>
+      </details>
+    </div>
     """
   end
 

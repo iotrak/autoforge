@@ -72,6 +72,12 @@ defmodule AutoforgeWeb.Layouts do
             active={@active_page == :users}
           />
           <.sidebar_nav_item
+            icon="hero-user-group"
+            label="Groups"
+            href={~p"/user-groups"}
+            active={@active_page == :user_groups}
+          />
+          <.sidebar_nav_item
             icon="hero-cog-6-tooth"
             label="Settings"
             href={~p"/settings"}

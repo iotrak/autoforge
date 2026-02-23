@@ -9,5 +9,7 @@ defmodule Autoforge.Accounts do
     resource Autoforge.Accounts.Token
     resource Autoforge.Accounts.User
     resource Autoforge.Accounts.LlmProviderKey
+    resource Autoforge.Accounts.UserGroup
+    resource Autoforge.Accounts.UserGroupMembership
   end
 end

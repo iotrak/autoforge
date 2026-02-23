@@ -1,0 +1,65 @@
+defmodule Autoforge.Accounts.UserGroup do
+  use Ash.Resource,
+    otp_app: :autoforge,
+    domain: Autoforge.Accounts,
+    data_layer: AshPostgres.DataLayer,
+    authorizers: [Ash.Policy.Authorizer]
+
+  postgres do
+    table "user_groups"
+    repo Autoforge.Repo
+  end
+
+  actions do
+    defaults [:read, :destroy]
+
+    create :create do
+      accept [:name, :description]
+    end
+
+    update :update do
+      accept [:name, :description]
+      require_atomic? false
+    end
+  end
+
+  policies do
+    bypass AshAuthentication.Checks.AshAuthenticationInteraction do
+      authorize_if always()
+    end
+
+    policy action_type([:read, :create, :update, :destroy]) do
+      authorize_if actor_present()
+    end
+  end
+
+  attributes do
+    uuid_primary_key :id
+
+    attribute :name, :string do
+      allow_nil? false
+      public? true
+      constraints max_length: 255
+    end
+
+    attribute :description, :string do
+      allow_nil? true
+      public? true
+    end
+
+    create_timestamp :inserted_at
+    update_timestamp :updated_at
+  end
+
+  relationships do
+    many_to_many :members, Autoforge.Accounts.User do
+      through Autoforge.Accounts.UserGroupMembership
+      source_attribute_on_join_resource :user_group_id
+      destination_attribute_on_join_resource :user_id
+    end
+  end
+
+  identities do
+    identity :unique_name, [:name]
+  end
+end

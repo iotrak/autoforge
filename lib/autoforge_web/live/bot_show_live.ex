@@ -3,6 +3,7 @@ defmodule AutoforgeWeb.BotShowLive do
 
   alias Autoforge.Accounts.UserGroup
   alias Autoforge.Ai.{Bot, BotTool, BotUserGroup, Tool}
+  alias Autoforge.Markdown
 
   require Ash.Query
 
@@ -251,8 +252,8 @@ defmodule AutoforgeWeb.BotShowLive do
             <%= if @bot.system_prompt do %>
               <div class="mt-4">
                 <dt class="text-sm text-base-content/60 mb-1">System Prompt</dt>
-                <dd class="text-sm bg-base-300 rounded-lg p-3 whitespace-pre-wrap">
-                  {@bot.system_prompt}
+                <dd class="prose prose-sm max-w-none bg-base-300 rounded-lg p-3">
+                  {Markdown.to_html(@bot.system_prompt)}
                 </dd>
               </div>
             <% end %>

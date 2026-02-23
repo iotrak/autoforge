@@ -156,6 +156,62 @@ defmodule AutoforgeWeb.CoreComponents do
     """
   end
 
+  @doc """
+  Renders a datetime in the user's local timezone.
+
+  Accepts a `DateTime`, `NaiveDateTime`, or any struct with datetime fields.
+  The `user` must have a `timezone` field. Falls back to UTC if the timezone
+  is invalid.
+
+  ## Formats
+
+    * `:date` — medium date, e.g. "Feb 23, 2026" (default)
+    * `:time` — short time, e.g. "5:00 PM"
+    * `:datetime` — medium datetime, e.g. "Feb 23, 2026, 5:00 PM"
+
+  ## Examples
+
+      <.local_time value={@message.inserted_at} user={@current_user} />
+      <.local_time value={@message.inserted_at} user={@current_user} format={:time} />
+  """
+  attr :value, :any, required: true
+  attr :user, :any, required: true
+  attr :format, :atom, default: :date, values: [:date, :time, :datetime]
+  attr :class, :any, default: nil
+
+  def local_time(assigns) do
+    tz = (assigns.user && assigns.user.timezone) || "Etc/UTC"
+    shifted = shift_to_zone(assigns.value, tz)
+
+    formatted =
+      case assigns.format do
+        :date -> Autoforge.Cldr.Date.to_string!(shifted, format: :medium)
+        :time -> Autoforge.Cldr.Time.to_string!(shifted, format: :short)
+        :datetime -> Autoforge.Cldr.DateTime.to_string!(shifted, format: :medium)
+      end
+
+    assigns = assign(assigns, formatted: formatted, iso: DateTime.to_iso8601(shifted))
+
+    ~H"""
+    <time datetime={@iso} class={@class}>{@formatted}</time>
+    """
+  end
+
+  defp shift_to_zone(%DateTime{} = dt, tz) do
+    case DateTime.shift_zone(dt, tz) do
+      {:ok, shifted} -> shifted
+      _ -> dt
+    end
+  end
+
+  defp shift_to_zone(%NaiveDateTime{} = ndt, tz) do
+    ndt
+    |> DateTime.from_naive!("Etc/UTC")
+    |> shift_to_zone(tz)
+  end
+
+  defp shift_to_zone(other, _tz), do: other
+
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do

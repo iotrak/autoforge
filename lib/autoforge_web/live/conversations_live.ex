@@ -112,7 +112,7 @@ defmodule AutoforgeWeb.ConversationsLive do
                   </.link>
                   <div class="flex items-center gap-2 shrink-0">
                     <span class="text-xs text-base-content/50 whitespace-nowrap pt-1">
-                      {format_date(conversation.updated_at)}
+                      <.local_time value={conversation.updated_at} user={@current_user} />
                     </span>
                     <.dropdown placement="bottom-end">
                       <:toggle>

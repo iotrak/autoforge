@@ -293,7 +293,8 @@ defmodule AutoforgeWeb.ConversationLive do
               "text-[10px] text-base-content/40 mt-1 px-1",
               if(message.role == :user, do: "text-right", else: "text-left")
             ]}>
-              {message_sender(message)} · {format_time(message.inserted_at)}
+              {message_sender(message)} ·
+              <.local_time value={message.inserted_at} user={@current_user} format={:time} />
             </span>
           </div>
 

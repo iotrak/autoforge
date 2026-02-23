@@ -119,7 +119,7 @@ defmodule AutoforgeWeb.BotsLive do
                   <span class="text-sm">{bot.temperature}</span>
                 </:cell>
                 <:cell class="text-base-content/70 text-sm">
-                  {format_date(bot.inserted_at)}
+                  <.local_time value={bot.inserted_at} user={@current_user} />
                 </:cell>
                 <:cell>
                   <.dropdown placement="bottom-end">

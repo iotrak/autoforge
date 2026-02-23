@@ -199,7 +199,7 @@ defmodule AutoforgeWeb.LlmProviderKeysComponent do
               </:cell>
               <:cell>{key.name}</:cell>
               <:cell class="text-base-content/70 text-sm">
-                {format_date(key.inserted_at)}
+                <.local_time value={key.inserted_at} user={@current_user} />
               </:cell>
               <:cell>
                 <.dropdown placement="bottom-end">

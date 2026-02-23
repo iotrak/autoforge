@@ -11,11 +11,11 @@ defmodule AutoforgeWeb.DashboardLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_user={@current_user} active_page={:dashboard}>
       <div class="max-w-4xl mx-auto">
         <div class="mb-8">
           <h1 class="text-3xl font-bold tracking-tight">
-            Welcome back, {@current_user.email}
+            Welcome back, {@current_user.name || @current_user.email}
           </h1>
           <p class="mt-2 text-base-content/70">
             Here's your dashboard. More features coming soon.

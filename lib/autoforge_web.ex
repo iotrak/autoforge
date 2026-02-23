@@ -84,7 +84,7 @@ defmodule AutoforgeWeb do
 
       # HTML escaping functionality
       import Phoenix.HTML
-      import Fluxon
+      use Fluxon
 
       # Core UI components
       import AutoforgeWeb.CoreComponents

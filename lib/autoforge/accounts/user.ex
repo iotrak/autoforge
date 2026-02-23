@@ -54,6 +54,11 @@ defmodule Autoforge.Accounts.User do
       get_by :email
     end
 
+    update :update_profile do
+      accept [:name, :timezone]
+      require_atomic? false
+    end
+
     create :sign_in_with_magic_link do
       description "Sign in or register a user with magic link."
 
@@ -95,6 +100,16 @@ defmodule Autoforge.Accounts.User do
     bypass AshAuthentication.Checks.AshAuthenticationInteraction do
       authorize_if always()
     end
+
+    policy action(:update_profile) do
+      authorize_if expr(id == ^actor(:id))
+    end
+  end
+
+  validations do
+    validate {Autoforge.Accounts.Validations.ValidTimezone, []} do
+      on [:update]
+    end
   end
 
   attributes do
@@ -103,6 +118,19 @@ defmodule Autoforge.Accounts.User do
     attribute :email, :ci_string do
       allow_nil? false
       public? true
+    end
+
+    attribute :name, :string do
+      allow_nil? true
+      public? true
+      constraints max_length: 255
+    end
+
+    attribute :timezone, :string do
+      allow_nil? false
+      public? true
+      default "America/New_York"
+      constraints max_length: 100
     end
   end
 

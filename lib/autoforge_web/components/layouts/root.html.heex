@@ -29,6 +29,11 @@
         window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
         
         window.addEventListener("phx:set-theme", (e) => setTheme(e.target.dataset.phxTheme));
+        window.addEventListener("phx:cycle-theme", () => {
+          const current = localStorage.getItem("phx:theme") || "system";
+          const next = current === "system" ? "light" : current === "light" ? "dark" : "system";
+          setTheme(next);
+        });
       })();
     </script>
   </head>

@@ -9,15 +9,26 @@ defmodule AutoforgeWeb.ConversationsLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    {:ok, assign(socket, page_title: "Conversations", conversations: load_conversations(socket))}
+  end
+
+  @impl true
+  def handle_event("delete", %{"id" => id}, socket) do
     user = socket.assigns.current_user
+    conversation = Enum.find(socket.assigns.conversations, &(&1.id == id))
 
-    conversations =
-      Conversation
-      |> Ash.Query.sort(updated_at: :desc)
-      |> Ash.Query.load([:bots, :messages])
-      |> Ash.read!(actor: user)
+    if conversation do
+      Ash.destroy!(conversation, actor: user)
+    end
 
-    {:ok, assign(socket, page_title: "Conversations", conversations: conversations)}
+    {:noreply, assign(socket, conversations: load_conversations(socket))}
+  end
+
+  defp load_conversations(socket) do
+    Conversation
+    |> Ash.Query.sort(updated_at: :desc)
+    |> Ash.Query.load([:bots, :messages])
+    |> Ash.read!(actor: socket.assigns.current_user)
   end
 
   defp last_message(conversation) do
@@ -73,14 +84,16 @@ defmodule AutoforgeWeb.ConversationsLive do
           </div>
         <% else %>
           <div class="flex flex-col gap-2">
-            <.link
+            <div
               :for={conversation <- @conversations}
-              navigate={~p"/conversations/#{conversation.id}"}
-              class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer"
+              class="card bg-base-200 hover:bg-base-300 transition-colors"
             >
               <div class="card-body py-4 px-5">
                 <div class="flex items-start justify-between gap-4">
-                  <div class="flex-1 min-w-0">
+                  <.link
+                    navigate={~p"/conversations/#{conversation.id}"}
+                    class="flex-1 min-w-0 cursor-pointer"
+                  >
                     <h3 class="font-semibold truncate">{conversation.subject}</h3>
                     <div class="flex items-center gap-2 mt-1.5">
                       <span
@@ -96,13 +109,30 @@ defmodule AutoforgeWeb.ConversationsLive do
                     >
                       {truncate(msg.body)}
                     </p>
+                  </.link>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-xs text-base-content/50 whitespace-nowrap pt-1">
+                      {format_date(conversation.updated_at)}
+                    </span>
+                    <.dropdown placement="bottom-end">
+                      <:toggle>
+                        <button class="p-1 rounded-lg hover:bg-base-300 transition-colors">
+                          <.icon name="hero-ellipsis-horizontal" class="w-5 h-5 text-base-content/50" />
+                        </button>
+                      </:toggle>
+                      <.dropdown_button
+                        phx-click="delete"
+                        phx-value-id={conversation.id}
+                        data-confirm="Are you sure you want to delete this conversation? All messages will be lost."
+                        class="text-error"
+                      >
+                        <.icon name="hero-trash" class="w-4 h-4 mr-2" /> Delete
+                      </.dropdown_button>
+                    </.dropdown>
                   </div>
-                  <span class="text-xs text-base-content/50 whitespace-nowrap pt-1">
-                    {format_date(conversation.updated_at)}
-                  </span>
                 </div>
               </div>
-            </.link>
+            </div>
           </div>
         <% end %>
       </div>

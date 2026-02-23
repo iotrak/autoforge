@@ -8,6 +8,10 @@ defmodule Autoforge.Chat.ConversationBot do
   postgres do
     table "conversation_bots"
     repo Autoforge.Repo
+
+    references do
+      reference :conversation, on_delete: :delete
+    end
   end
 
   actions do

@@ -56,6 +56,18 @@ defmodule AutoforgeWeb.ConversationLive do
   end
 
   @impl true
+  def handle_event("delete", _params, socket) do
+    user = socket.assigns.current_user
+    conversation = socket.assigns.conversation
+
+    Ash.destroy!(conversation, actor: user)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Conversation deleted.")
+     |> push_navigate(to: ~p"/conversations")}
+  end
+
   def handle_event("send", %{"body" => body}, socket) do
     body = String.trim(body)
 
@@ -186,6 +198,20 @@ defmodule AutoforgeWeb.ConversationLive do
               </.tooltip>
             </div>
           </div>
+          <.dropdown placement="bottom-end">
+            <:toggle>
+              <button class="p-1.5 rounded-lg hover:bg-base-300 transition-colors">
+                <.icon name="hero-ellipsis-vertical" class="w-5 h-5 text-base-content/60" />
+              </button>
+            </:toggle>
+            <.dropdown_button
+              phx-click="delete"
+              data-confirm="Are you sure you want to delete this conversation? All messages will be lost."
+              class="text-error"
+            >
+              <.icon name="hero-trash" class="w-4 h-4 mr-2" /> Delete conversation
+            </.dropdown_button>
+          </.dropdown>
         </header>
 
         <.context_warning :if={@context_usage > 0.7} usage={@context_usage} />

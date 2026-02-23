@@ -9,6 +9,10 @@ defmodule Autoforge.Chat.Message do
   postgres do
     table "messages"
     repo Autoforge.Repo
+
+    references do
+      reference :conversation, on_delete: :delete
+    end
   end
 
   actions do

@@ -8,6 +8,10 @@ defmodule Autoforge.Chat.ConversationParticipant do
   postgres do
     table "conversation_participants"
     repo Autoforge.Repo
+
+    references do
+      reference :conversation, on_delete: :delete
+    end
   end
 
   actions do

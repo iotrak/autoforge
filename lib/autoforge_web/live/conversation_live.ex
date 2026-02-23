@@ -219,7 +219,7 @@ defmodule AutoforgeWeb.ConversationLive do
                     </:content>
                   </.tooltip>
                 </div>
-                <div class="prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                <div class="prose prose-sm max-w-none dark:prose-invert [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                   {Markdown.to_html(message.body)}
                 </div>
               </div>

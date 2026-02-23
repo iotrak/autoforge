@@ -65,6 +65,12 @@ defmodule AutoforgeWeb.Layouts do
             href={~p"/bots"}
             active={@active_page == :bots}
           />
+          <.sidebar_nav_item
+            icon="hero-users"
+            label="Users"
+            href={~p"/users"}
+            active={@active_page == :users}
+          />
         </nav>
 
         <div class="flex flex-col items-center gap-3">

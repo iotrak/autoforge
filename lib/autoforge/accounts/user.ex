@@ -59,6 +59,18 @@ defmodule Autoforge.Accounts.User do
       require_atomic? false
     end
 
+    create :create_user do
+      accept [:email, :name, :timezone]
+    end
+
+    update :update_user do
+      accept [:email, :name, :timezone]
+      require_atomic? false
+    end
+
+    destroy :destroy do
+    end
+
     create :sign_in_with_magic_link do
       description "Sign in or register a user with magic link."
 
@@ -108,11 +120,15 @@ defmodule Autoforge.Accounts.User do
     policy action(:update_profile) do
       authorize_if expr(id == ^actor(:id))
     end
+
+    policy action([:create_user, :update_user, :destroy]) do
+      authorize_if actor_present()
+    end
   end
 
   validations do
     validate {Autoforge.Accounts.Validations.ValidTimezone, []} do
-      on [:update]
+      on [:create, :update]
     end
   end
 

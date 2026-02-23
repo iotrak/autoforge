@@ -36,6 +36,7 @@ defmodule AutoforgeWeb.Router do
       #
       # If an authenticated user must *not* be present:
       # on_mount {AutoforgeWeb.LiveUserAuth, :live_no_user}
+      live "/dashboard", DashboardLive
     end
   end
 

@@ -37,23 +37,21 @@ defmodule Autoforge.MixProject do
     [
       file: "AGENTS.md",
       usage_rules: [:elixir, :otp],
-
       skills: [
         location: ".claude/skills",
-
         build: [
           "ash-framework": [
-            description: "Use this skill working with Ash Framework or any of its extensions. Always consult this when making any domain changes, features or fixes.",
+            description:
+              "Use this skill working with Ash Framework or any of its extensions. Always consult this when making any domain changes, features or fixes.",
             usage_rules: [:ash, ~r/^ash_/]
           ],
-
           fluxon: [
             description: "Use this skill working with Fluxon or components in general.",
             usage_rules: [:fluxon]
           ],
-
           "phoenix-framework": [
-            description: "Use this skill working with Phoenix Framework. Consult this when working with the web layer, controllers, views, liveviews etc.",
+            description:
+              "Use this skill working with Phoenix Framework. Consult this when working with the web layer, controllers, views, liveviews etc.",
             usage_rules: [:phoenix, ~r/^phoenix_/]
           ]
         ]
@@ -70,6 +68,7 @@ defmodule Autoforge.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:req_llm, "~> 1.0"},
       {:fluxon, "~> 2.0.0", repo: :fluxon},
       {:picosat_elixir, "~> 0.2"},
       {:sourceror, "~> 1.8", only: [:dev, :test]},

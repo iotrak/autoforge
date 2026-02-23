@@ -73,6 +73,15 @@ if config_env() == :prod do
       System.get_env("TOKEN_SIGNING_SECRET") ||
         raise("Missing environment variable `TOKEN_SIGNING_SECRET`!")
 
+  config :autoforge, Autoforge.Vault,
+    ciphers: [
+      default:
+        {Cloak.Ciphers.AES.GCM,
+         tag: "AES.GCM.V1",
+         key: Base.decode64!(System.get_env("CLOAK_KEY") || raise("Missing CLOAK_KEY")),
+         iv_length: 12}
+    ]
+
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key

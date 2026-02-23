@@ -1,6 +1,16 @@
 import Config
 config :autoforge, Oban, testing: :manual
 config :autoforge, token_signing_secret: "u59L434cWD5h5IlLDFmloKfb2GA61obD"
+
+config :autoforge, Autoforge.Vault,
+  ciphers: [
+    default:
+      {Cloak.Ciphers.AES.GCM,
+       tag: "AES.GCM.V1",
+       key: Base.decode64!("w4KPQJNsG32vVz9O7df2Q9JT8LakMM9JtsGYsyH+H8o="),
+       iv_length: 12}
+  ]
+
 config :bcrypt_elixir, log_rounds: 1
 config :ash, policies: [show_policy_breakdowns?: true], disable_async?: true
 

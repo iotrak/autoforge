@@ -8,5 +8,6 @@ defmodule Autoforge.Accounts do
   resources do
     resource Autoforge.Accounts.Token
     resource Autoforge.Accounts.User
+    resource Autoforge.Accounts.LlmProviderKey
   end
 end

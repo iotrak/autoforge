@@ -134,6 +134,10 @@ defmodule Autoforge.Accounts.User do
     end
   end
 
+  relationships do
+    has_many :llm_provider_keys, Autoforge.Accounts.LlmProviderKey
+  end
+
   identities do
     identity :unique_email, [:email]
   end

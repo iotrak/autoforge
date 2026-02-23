@@ -9,6 +9,7 @@ defmodule Autoforge.Application do
   def start(_type, _args) do
     children = [
       AutoforgeWeb.Telemetry,
+      Autoforge.Vault,
       Autoforge.Repo,
       {DNSCluster, query: Application.get_env(:autoforge, :dns_cluster_query) || :ignore},
       {Oban,

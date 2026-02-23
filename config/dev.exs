@@ -71,6 +71,15 @@ config :autoforge, AutoforgeWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :autoforge, dev_routes: true, token_signing_secret: "zEtZ0SO7huTutwT0TCRPfWX1pUNEBlHd"
 
+config :autoforge, Autoforge.Vault,
+  ciphers: [
+    default:
+      {Cloak.Ciphers.AES.GCM,
+       tag: "AES.GCM.V1",
+       key: Base.decode64!("w4KPQJNsG32vVz9O7df2Q9JT8LakMM9JtsGYsyH+H8o="),
+       iv_length: 12}
+  ]
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

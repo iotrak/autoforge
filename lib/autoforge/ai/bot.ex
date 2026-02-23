@@ -113,6 +113,12 @@ defmodule Autoforge.Ai.Bot do
       source_attribute_on_join_resource :bot_id
       destination_attribute_on_join_resource :user_group_id
     end
+
+    many_to_many :tools, Autoforge.Ai.Tool do
+      through Autoforge.Ai.BotTool
+      source_attribute_on_join_resource :bot_id
+      destination_attribute_on_join_resource :tool_id
+    end
   end
 
   identities do

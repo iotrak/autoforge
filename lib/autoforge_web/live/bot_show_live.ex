@@ -2,7 +2,7 @@ defmodule AutoforgeWeb.BotShowLive do
   use AutoforgeWeb, :live_view
 
   alias Autoforge.Accounts.UserGroup
-  alias Autoforge.Ai.{Bot, BotUserGroup}
+  alias Autoforge.Ai.{Bot, BotTool, BotUserGroup, Tool}
 
   require Ash.Query
 
@@ -21,12 +21,14 @@ defmodule AutoforgeWeb.BotShowLive do
 
       {:ok, bot} ->
         available_groups = load_available_groups(bot, current_user)
+        available_tools = load_available_tools(bot, current_user)
 
         {:ok,
          assign(socket,
            page_title: bot.name,
            bot: bot,
-           available_groups: available_groups
+           available_groups: available_groups,
+           available_tools: available_tools
          )}
 
       {:error, _} ->
@@ -82,6 +84,38 @@ defmodule AutoforgeWeb.BotShowLive do
     {:noreply, reload_bot(socket)}
   end
 
+  def handle_event("add_tool", %{"tool_id" => tool_id}, socket) do
+    current_user = socket.assigns.current_user
+    bot = socket.assigns.bot
+
+    BotTool
+    |> AshPhoenix.Form.for_create(:create, actor: current_user)
+    |> AshPhoenix.Form.submit(params: %{"bot_id" => bot.id, "tool_id" => tool_id})
+    |> case do
+      {:ok, _} ->
+        {:noreply, reload_bot(socket)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to add tool.")}
+    end
+  end
+
+  def handle_event("remove_tool", %{"tool_id" => tool_id}, socket) do
+    current_user = socket.assigns.current_user
+    bot = socket.assigns.bot
+
+    bot_tool =
+      BotTool
+      |> Ash.Query.filter(bot_id == ^bot.id and tool_id == ^tool_id)
+      |> Ash.read_one!(actor: current_user)
+
+    if bot_tool do
+      Ash.destroy!(bot_tool, actor: current_user)
+    end
+
+    {:noreply, reload_bot(socket)}
+  end
+
   defp reload_bot(socket) do
     current_user = socket.assigns.current_user
     bot_id = socket.assigns.bot.id
@@ -89,10 +123,12 @@ defmodule AutoforgeWeb.BotShowLive do
     case load_bot(bot_id, current_user) do
       {:ok, bot} when not is_nil(bot) ->
         available_groups = load_available_groups(bot, current_user)
+        available_tools = load_available_tools(bot, current_user)
 
         assign(socket,
           bot: bot,
-          available_groups: available_groups
+          available_groups: available_groups,
+          available_tools: available_tools
         )
 
       _ ->
@@ -105,7 +141,7 @@ defmodule AutoforgeWeb.BotShowLive do
   defp load_bot(id, actor) do
     Bot
     |> Ash.Query.filter(id == ^id)
-    |> Ash.Query.load([:user_groups])
+    |> Ash.Query.load([:user_groups, :tools])
     |> Ash.read_one(actor: actor)
   end
 
@@ -116,6 +152,15 @@ defmodule AutoforgeWeb.BotShowLive do
     |> Ash.Query.sort(name: :asc)
     |> Ash.read!(actor: actor)
     |> Enum.reject(&(&1.id in assigned_group_ids))
+  end
+
+  defp load_available_tools(bot, actor) do
+    assigned_tool_ids = Enum.map(bot.tools, & &1.id)
+
+    Tool
+    |> Ash.Query.sort(name: :asc)
+    |> Ash.read!(actor: actor)
+    |> Enum.reject(&(&1.id in assigned_tool_ids))
   end
 
   defp format_model(model_string) do
@@ -214,7 +259,7 @@ defmodule AutoforgeWeb.BotShowLive do
           </div>
         </div>
 
-        <div class="card bg-base-200 shadow-sm">
+        <div class="card bg-base-200 shadow-sm mb-6">
           <div class="card-body">
             <div class="flex items-center gap-2 mb-4">
               <h2 class="text-lg font-semibold">User Groups</h2>
@@ -267,6 +312,70 @@ defmodule AutoforgeWeb.BotShowLive do
                         phx-click="remove_group"
                         phx-value-group_id={group.id}
                         data-confirm="Remove this bot from the group?"
+                      >
+                        <.icon name="hero-x-mark" class="w-4 h-4" />
+                      </.button>
+                    </:cell>
+                  </.table_row>
+                </.table_body>
+              </.table>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body">
+            <div class="flex items-center gap-2 mb-4">
+              <h2 class="text-lg font-semibold">Tools</h2>
+              <span class="badge badge-sm">{length(@bot.tools)}</span>
+            </div>
+
+            <%= if @available_tools != [] do %>
+              <.form
+                for={%{}}
+                phx-submit="add_tool"
+                class="flex items-end gap-3 mb-4"
+              >
+                <div class="flex-1">
+                  <label class="text-sm font-medium mb-1 block">Add a tool</label>
+                  <select name="tool_id" class="select select-bordered w-full">
+                    <option :for={tool <- @available_tools} value={tool.id}>
+                      {tool.name}
+                    </option>
+                  </select>
+                </div>
+                <.button type="submit" variant="solid" color="primary" size="sm">
+                  <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Add
+                </.button>
+              </.form>
+            <% end %>
+
+            <%= if @bot.tools == [] do %>
+              <p class="text-sm text-base-content/50">No tools assigned.</p>
+            <% else %>
+              <.table>
+                <.table_head>
+                  <:col class="w-full">Tool</:col>
+                  <:col></:col>
+                </.table_head>
+                <.table_body>
+                  <.table_row :for={tool <- @bot.tools}>
+                    <:cell class="w-full">
+                      <span class="font-medium">{tool.name}</span>
+                      <%= if tool.description do %>
+                        <span class="text-xs text-base-content/50 ml-2">
+                          {tool.description}
+                        </span>
+                      <% end %>
+                    </:cell>
+                    <:cell>
+                      <.button
+                        variant="ghost"
+                        size="sm"
+                        color="danger"
+                        phx-click="remove_tool"
+                        phx-value-tool_id={tool.id}
+                        data-confirm="Remove this tool from the bot?"
                       >
                         <.icon name="hero-x-mark" class="w-4 h-4" />
                       </.button>

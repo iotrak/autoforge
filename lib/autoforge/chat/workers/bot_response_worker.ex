@@ -14,7 +14,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
 
   use Oban.Worker, queue: :ai, max_attempts: 3
 
-  alias Autoforge.Ai.Bot
+  alias Autoforge.Ai.{Bot, ToolResolver}
   alias Autoforge.Chat.{Conversation, Message}
 
   import ReqLLM.Context, only: [user: 1, assistant: 1]
@@ -25,6 +25,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
   @default_context_limit 8192
   @context_usage_ratio 0.8
   @bytes_per_token 4
+  @max_tool_rounds 20
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"bot_id" => bot_id, "conversation_id" => conversation_id}}) do
@@ -42,7 +43,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
   end
 
   defp load_bot(bot_id) do
-    case Ash.get(Bot, bot_id, load: [:llm_provider_key], authorize?: false) do
+    case Ash.get(Bot, bot_id, load: [:llm_provider_key, :tools], authorize?: false) do
       {:ok, nil} -> {:cancel, "bot not found: #{bot_id}"}
       {:ok, bot} -> {:ok, bot}
       {:error, reason} -> {:cancel, "failed to load bot: #{inspect(reason)}"}
@@ -72,15 +73,16 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
     llm_messages = build_messages(messages, bot, multi_participant?)
     truncated = truncate_messages(llm_messages, system_prompt, bot.model)
 
-    opts =
+    participant_ids = Enum.map(conversation.participants, & &1.id)
+    tools = ToolResolver.resolve(bot, participant_ids)
+
+    base_opts =
       [api_key: api_key, system_prompt: system_prompt]
       |> maybe_put(:temperature, bot.temperature && Decimal.to_float(bot.temperature))
       |> maybe_put(:max_tokens, bot.max_tokens)
 
-    case ReqLLM.generate_text(bot.model, truncated, opts) do
-      {:ok, response} ->
-        response_text = ReqLLM.Response.text(response)
-
+    case run_tool_loop(bot.model, truncated, tools, base_opts, 0) do
+      {:ok, response_text} ->
         Message
         |> Ash.Changeset.for_create(
           :create,
@@ -101,6 +103,38 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
 
       {:error, reason} ->
         Logger.warning("Bot response failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp run_tool_loop(model, messages, tools, opts, round) do
+    call_opts =
+      if tools != [] and round < @max_tool_rounds do
+        Keyword.put(opts, :tools, tools)
+      else
+        opts
+      end
+
+    case ReqLLM.generate_text(model, messages, call_opts) do
+      {:ok, response} ->
+        classified = ReqLLM.Response.classify(response)
+
+        if classified.type == :tool_calls and round < @max_tool_rounds do
+          tool_calls = ReqLLM.Response.tool_calls(response)
+
+          Logger.info(
+            "Tool calls (round #{round + 1}): #{Enum.map_join(tool_calls, ", ", & &1.function.name)}"
+          )
+
+          updated_context =
+            ReqLLM.Context.execute_and_append_tools(response.context, tool_calls, tools)
+
+          run_tool_loop(model, updated_context, tools, opts, round + 1)
+        else
+          {:ok, ReqLLM.Response.text(response) || ""}
+        end
+
+      {:error, reason} ->
         {:error, reason}
     end
   end

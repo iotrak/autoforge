@@ -109,4 +109,18 @@
   display: contents;
 }
 
+/* Bot message typography — blue accents to complement the info bubble */
+.prose-bot {
+  --tw-prose-links: oklch(from var(--color-info) l c h);
+  --tw-prose-headings: oklch(from var(--color-info) calc(l - 0.08) c h);
+  --tw-prose-bold: currentColor;
+  --tw-prose-counters: oklch(from var(--color-info) l c h / 0.6);
+  --tw-prose-bullets: oklch(from var(--color-info) l c h / 0.4);
+  --tw-prose-quote-borders: oklch(from var(--color-info) l c h / 0.3);
+  --tw-prose-code: oklch(from var(--color-info) calc(l - 0.05) c h);
+  --tw-prose-hr: oklch(from var(--color-info) l c h / 0.2);
+  --tw-prose-th-borders: oklch(from var(--color-info) l c h / 0.2);
+  --tw-prose-td-borders: oklch(from var(--color-info) l c h / 0.1);
+}
+
 /* This file is for your main application CSS */

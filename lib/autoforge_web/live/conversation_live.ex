@@ -75,7 +75,10 @@ defmodule AutoforgeWeb.ConversationLive do
              actor: user
            ) do
         {:ok, _message} ->
-          {:noreply, assign(socket, message_body: "")}
+          {:noreply,
+           socket
+           |> assign(message_body: "")
+           |> push_event("clear_input", %{})}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to send message.")}
@@ -164,7 +167,7 @@ defmodule AutoforgeWeb.ConversationLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:conversations}>
-      <div class="flex flex-col h-[calc(100vh-3rem)] -my-6 -mx-4 sm:-mx-6 lg:-mx-8">
+      <div class="flex flex-col h-screen -my-6 -mx-4 sm:-mx-6 lg:-mx-8">
         <header class="flex items-center gap-3 px-5 py-3 border-b border-base-300 bg-base-200/50">
           <.link
             navigate={~p"/conversations"}
@@ -205,8 +208,8 @@ defmodule AutoforgeWeb.ConversationLive do
               <div class={[
                 "max-w-[75%] rounded-2xl px-4 py-2.5",
                 if(message.role == :user,
-                  do: "bg-primary text-primary-content rounded-br-md",
-                  else: "bg-base-200 text-base-content rounded-bl-md"
+                  do: "bg-base-200 text-base-content rounded-br-md",
+                  else: "bg-info/10 text-base-content rounded-bl-md"
                 )
               ]}>
                 <div :if={message.role == :bot} class="mb-1">
@@ -219,7 +222,10 @@ defmodule AutoforgeWeb.ConversationLive do
                     </:content>
                   </.tooltip>
                 </div>
-                <div class="prose prose-sm max-w-none dark:prose-invert [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                <div class={[
+                  "prose prose-sm max-w-none dark:prose-invert [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+                  if(message.role == :bot, do: "prose-bot")
+                ]}>
                   {Markdown.to_html(message.body)}
                 </div>
               </div>
@@ -263,9 +269,11 @@ defmodule AutoforgeWeb.ConversationLive do
           <form phx-submit="send" class="flex items-end gap-3">
             <div class="flex-1">
               <textarea
+                id="chat-input"
                 name="body"
                 placeholder="Type a message..."
                 rows="1"
+                phx-hook="ChatInput"
                 class="textarea textarea-bordered w-full min-h-[2.5rem] max-h-32 resize-none"
               >{@message_body}</textarea>
             </div>

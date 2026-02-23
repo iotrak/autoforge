@@ -42,13 +42,34 @@ const ChatScroll = {
   },
 };
 
+const ChatInput = {
+  mounted() {
+    this.el.focus();
+    this.el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (this.el.value.trim() !== "") {
+          this.el.closest("form").dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true })
+          );
+          this.el.value = "";
+        }
+      }
+    });
+    this.handleEvent("clear_input", () => {
+      this.el.value = "";
+      this.el.focus();
+    });
+  },
+};
+
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
   .getAttribute("content");
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
-  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll },
+  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput },
   dom: {
     onBeforeElUpdated(from, to) {
       FluxonDOM.onBeforeElUpdated(from, to);

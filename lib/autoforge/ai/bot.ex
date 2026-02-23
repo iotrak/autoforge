@@ -23,8 +23,6 @@ defmodule Autoforge.Ai.Bot do
         :max_tokens,
         :llm_provider_key_id
       ]
-
-      change relate_actor(:user)
     end
 
     update :update do
@@ -52,7 +50,7 @@ defmodule Autoforge.Ai.Bot do
     end
 
     policy action_type([:read, :update, :destroy]) do
-      authorize_if expr(user_id == ^actor(:id))
+      authorize_if actor_present()
     end
   end
 
@@ -105,18 +103,19 @@ defmodule Autoforge.Ai.Bot do
   end
 
   relationships do
-    belongs_to :user, Autoforge.Accounts.User do
-      allow_nil? false
-      attribute_writable? false
-    end
-
     belongs_to :llm_provider_key, Autoforge.Accounts.LlmProviderKey do
       allow_nil? false
       attribute_writable? true
     end
+
+    many_to_many :user_groups, Autoforge.Accounts.UserGroup do
+      through Autoforge.Ai.BotUserGroup
+      source_attribute_on_join_resource :bot_id
+      destination_attribute_on_join_resource :user_group_id
+    end
   end
 
   identities do
-    identity :unique_name_per_user, [:user_id, :name]
+    identity :unique_name, [:name]
   end
 end

@@ -19,7 +19,7 @@ defmodule AutoforgeWeb.BotFormLive do
       %{"id" => id} ->
         bot =
           Bot
-          |> Ash.Query.filter(id == ^id and user_id == ^user.id)
+          |> Ash.Query.filter(id == ^id)
           |> Ash.read_one!(actor: user)
 
         if bot do
@@ -72,13 +72,13 @@ defmodule AutoforgeWeb.BotFormLive do
 
   def handle_event("save", %{"form" => params}, socket) do
     case AshPhoenix.Form.submit(socket.assigns.form.source, params: params) do
-      {:ok, _bot} ->
+      {:ok, bot} ->
         action = if socket.assigns.editing?, do: "updated", else: "created"
 
         {:noreply,
          socket
          |> put_flash(:info, "Bot #{action} successfully.")
-         |> push_navigate(to: ~p"/bots")}
+         |> push_navigate(to: ~p"/bots/#{bot.id}")}
 
       {:error, form} ->
         {:noreply, assign(socket, form: to_form(form))}

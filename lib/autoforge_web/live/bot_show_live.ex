@@ -1,7 +1,8 @@
-defmodule AutoforgeWeb.UserShowLive do
+defmodule AutoforgeWeb.BotShowLive do
   use AutoforgeWeb, :live_view
 
-  alias Autoforge.Accounts.{User, UserGroup, UserGroupMembership}
+  alias Autoforge.Accounts.UserGroup
+  alias Autoforge.Ai.{Bot, BotUserGroup}
 
   require Ash.Query
 
@@ -11,58 +12,54 @@ defmodule AutoforgeWeb.UserShowLive do
   def mount(%{"id" => id}, _session, socket) do
     current_user = socket.assigns.current_user
 
-    case load_user(id, current_user) do
+    case load_bot(id, current_user) do
       {:ok, nil} ->
         {:ok,
          socket
-         |> put_flash(:error, "User not found.")
-         |> push_navigate(to: ~p"/users")}
+         |> put_flash(:error, "Bot not found.")
+         |> push_navigate(to: ~p"/bots")}
 
-      {:ok, user} ->
-        available_groups = load_available_groups(user, current_user)
+      {:ok, bot} ->
+        available_groups = load_available_groups(bot, current_user)
 
         {:ok,
          assign(socket,
-           page_title: user.name || to_string(user.email),
-           user: user,
+           page_title: bot.name,
+           bot: bot,
            available_groups: available_groups
          )}
 
       {:error, _} ->
         {:ok,
          socket
-         |> put_flash(:error, "User not found.")
-         |> push_navigate(to: ~p"/users")}
+         |> put_flash(:error, "Bot not found.")
+         |> push_navigate(to: ~p"/bots")}
     end
   end
 
   @impl true
   def handle_event("delete", _params, socket) do
     current_user = socket.assigns.current_user
-    user = socket.assigns.user
+    bot = socket.assigns.bot
 
-    if user.id == current_user.id do
-      {:noreply, put_flash(socket, :error, "You cannot delete yourself.")}
-    else
-      Ash.destroy!(user, actor: current_user)
+    Ash.destroy!(bot, actor: current_user)
 
-      {:noreply,
-       socket
-       |> put_flash(:info, "User deleted successfully.")
-       |> push_navigate(to: ~p"/users")}
-    end
+    {:noreply,
+     socket
+     |> put_flash(:info, "Bot deleted successfully.")
+     |> push_navigate(to: ~p"/bots")}
   end
 
   def handle_event("add_group", %{"group_id" => group_id}, socket) do
     current_user = socket.assigns.current_user
-    user = socket.assigns.user
+    bot = socket.assigns.bot
 
-    UserGroupMembership
+    BotUserGroup
     |> AshPhoenix.Form.for_create(:create, actor: current_user)
-    |> AshPhoenix.Form.submit(params: %{"user_group_id" => group_id, "user_id" => user.id})
+    |> AshPhoenix.Form.submit(params: %{"bot_id" => bot.id, "user_group_id" => group_id})
     |> case do
       {:ok, _} ->
-        {:noreply, reload_user(socket)}
+        {:noreply, reload_bot(socket)}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to add group.")}
@@ -71,91 +68,109 @@ defmodule AutoforgeWeb.UserShowLive do
 
   def handle_event("remove_group", %{"group_id" => group_id}, socket) do
     current_user = socket.assigns.current_user
-    user = socket.assigns.user
+    bot = socket.assigns.bot
 
     membership =
-      UserGroupMembership
-      |> Ash.Query.filter(user_group_id == ^group_id and user_id == ^user.id)
+      BotUserGroup
+      |> Ash.Query.filter(bot_id == ^bot.id and user_group_id == ^group_id)
       |> Ash.read_one!(actor: current_user)
 
     if membership do
       Ash.destroy!(membership, actor: current_user)
     end
 
-    {:noreply, reload_user(socket)}
+    {:noreply, reload_bot(socket)}
   end
 
-  defp reload_user(socket) do
+  defp reload_bot(socket) do
     current_user = socket.assigns.current_user
-    user_id = socket.assigns.user.id
+    bot_id = socket.assigns.bot.id
 
-    case load_user(user_id, current_user) do
-      {:ok, user} when not is_nil(user) ->
-        available_groups = load_available_groups(user, current_user)
+    case load_bot(bot_id, current_user) do
+      {:ok, bot} when not is_nil(bot) ->
+        available_groups = load_available_groups(bot, current_user)
 
         assign(socket,
-          user: user,
+          bot: bot,
           available_groups: available_groups
         )
 
       _ ->
         socket
-        |> put_flash(:error, "User not found.")
-        |> push_navigate(to: ~p"/users")
+        |> put_flash(:error, "Bot not found.")
+        |> push_navigate(to: ~p"/bots")
     end
   end
 
-  defp load_user(id, actor) do
-    User
+  defp load_bot(id, actor) do
+    Bot
     |> Ash.Query.filter(id == ^id)
     |> Ash.Query.load([:user_groups])
     |> Ash.read_one(actor: actor)
   end
 
-  defp load_available_groups(user, actor) do
-    member_group_ids = Enum.map(user.user_groups, & &1.id)
+  defp load_available_groups(bot, actor) do
+    assigned_group_ids = Enum.map(bot.user_groups, & &1.id)
 
     UserGroup
     |> Ash.Query.sort(name: :asc)
     |> Ash.read!(actor: actor)
-    |> Enum.reject(&(&1.id in member_group_ids))
+    |> Enum.reject(&(&1.id in assigned_group_ids))
+  end
+
+  defp format_model(model_string) do
+    case LLMDB.parse(model_string) do
+      {:ok, {provider_id, model_id}} ->
+        provider_name =
+          case LLMDB.provider(provider_id) do
+            {:ok, p} -> p.name
+            _ -> to_string(provider_id)
+          end
+
+        model_name =
+          case LLMDB.model(provider_id, model_id) do
+            {:ok, m} -> m.name || model_id
+            _ -> model_id
+          end
+
+        {provider_name, model_name}
+
+      _ ->
+        {"Unknown", model_string}
+    end
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active_page={:users}>
+    <Layouts.app flash={@flash} current_user={@current_user} active_page={:bots}>
       <div class="max-w-3xl mx-auto">
         <div class="mb-6">
           <.link
-            navigate={~p"/users"}
+            navigate={~p"/bots"}
             class="text-sm text-base-content/60 hover:text-base-content transition-colors"
           >
-            <.icon name="hero-arrow-left" class="w-4 h-4 inline-block mr-1" /> Back to Users
+            <.icon name="hero-arrow-left" class="w-4 h-4 inline-block mr-1" /> Back to Bots
           </.link>
         </div>
 
         <div class="flex items-center justify-between mb-6">
-          <h1 class="text-2xl font-bold tracking-tight">
-            {@user.name || to_string(@user.email)}
-          </h1>
+          <h1 class="text-2xl font-bold tracking-tight">{@bot.name}</h1>
           <div class="flex items-center gap-2">
-            <.link navigate={~p"/users/#{@user.id}/edit"}>
+            <.link navigate={~p"/bots/#{@bot.id}/edit"}>
               <.button variant="outline" size="sm">
                 <.icon name="hero-pencil-square" class="w-4 h-4 mr-1" /> Edit
               </.button>
             </.link>
-            <%= if @user.id != @current_user.id do %>
-              <.button
-                variant="outline"
-                size="sm"
-                color="danger"
-                phx-click="delete"
-                data-confirm="Are you sure you want to delete this user?"
-              >
-                <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete
-              </.button>
-            <% end %>
+            <.button
+              variant="outline"
+              size="sm"
+              color="danger"
+              phx-click="delete"
+              data-confirm="Are you sure you want to delete this bot?"
+            >
+              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete
+            </.button>
           </div>
         </div>
 
@@ -164,26 +179,46 @@ defmodule AutoforgeWeb.UserShowLive do
             <h2 class="text-lg font-semibold mb-4">Details</h2>
             <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
               <div>
-                <dt class="text-sm text-base-content/60">Email</dt>
-                <dd class="mt-1 font-medium">{@user.email}</dd>
-              </div>
-              <div>
                 <dt class="text-sm text-base-content/60">Name</dt>
-                <dd class="mt-1 font-medium">{@user.name || "—"}</dd>
+                <dd class="mt-1 font-medium">{@bot.name}</dd>
               </div>
               <div>
-                <dt class="text-sm text-base-content/60">Timezone</dt>
-                <dd class="mt-1 font-medium">{@user.timezone}</dd>
+                <dt class="text-sm text-base-content/60">Description</dt>
+                <dd class="mt-1 font-medium">{@bot.description || "—"}</dd>
+              </div>
+              <div>
+                <% {provider_name, model_name} = format_model(@bot.model) %>
+                <dt class="text-sm text-base-content/60">Model</dt>
+                <dd class="mt-1 font-medium">
+                  {model_name}
+                  <span class="text-xs text-base-content/50 ml-1">{provider_name}</span>
+                </dd>
+              </div>
+              <div>
+                <dt class="text-sm text-base-content/60">Temperature</dt>
+                <dd class="mt-1 font-medium">{@bot.temperature || "—"}</dd>
+              </div>
+              <div>
+                <dt class="text-sm text-base-content/60">Max Tokens</dt>
+                <dd class="mt-1 font-medium">{@bot.max_tokens || "—"}</dd>
               </div>
             </dl>
+            <%= if @bot.system_prompt do %>
+              <div class="mt-4">
+                <dt class="text-sm text-base-content/60 mb-1">System Prompt</dt>
+                <dd class="text-sm bg-base-300 rounded-lg p-3 whitespace-pre-wrap">
+                  {@bot.system_prompt}
+                </dd>
+              </div>
+            <% end %>
           </div>
         </div>
 
         <div class="card bg-base-200 shadow-sm">
           <div class="card-body">
             <div class="flex items-center gap-2 mb-4">
-              <h2 class="text-lg font-semibold">Groups</h2>
-              <span class="badge badge-sm">{length(@user.user_groups)}</span>
+              <h2 class="text-lg font-semibold">User Groups</h2>
+              <span class="badge badge-sm">{length(@bot.user_groups)}</span>
             </div>
 
             <%= if @available_groups != [] do %>
@@ -206,8 +241,8 @@ defmodule AutoforgeWeb.UserShowLive do
               </.form>
             <% end %>
 
-            <%= if @user.user_groups == [] do %>
-              <p class="text-sm text-base-content/50">Not a member of any groups.</p>
+            <%= if @bot.user_groups == [] do %>
+              <p class="text-sm text-base-content/50">Not assigned to any groups.</p>
             <% else %>
               <.table>
                 <.table_head>
@@ -215,7 +250,7 @@ defmodule AutoforgeWeb.UserShowLive do
                   <:col></:col>
                 </.table_head>
                 <.table_body>
-                  <.table_row :for={group <- @user.user_groups}>
+                  <.table_row :for={group <- @bot.user_groups}>
                     <:cell class="w-full">
                       <.link
                         navigate={~p"/user-groups/#{group.id}"}
@@ -231,7 +266,7 @@ defmodule AutoforgeWeb.UserShowLive do
                         color="danger"
                         phx-click="remove_group"
                         phx-value-group_id={group.id}
-                        data-confirm="Remove this user from the group?"
+                        data-confirm="Remove this bot from the group?"
                       >
                         <.icon name="hero-x-mark" class="w-4 h-4" />
                       </.button>

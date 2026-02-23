@@ -2,6 +2,7 @@ defmodule AutoforgeWeb.UserGroupShowLive do
   use AutoforgeWeb, :live_view
 
   alias Autoforge.Accounts.{User, UserGroup, UserGroupMembership}
+  alias Autoforge.Ai.{Bot, BotUserGroup}
 
   require Ash.Query
 
@@ -20,12 +21,14 @@ defmodule AutoforgeWeb.UserGroupShowLive do
 
       {:ok, group} ->
         available_users = load_available_users(group, current_user)
+        available_bots = load_available_bots(group, current_user)
 
         {:ok,
          assign(socket,
            page_title: group.name,
            group: group,
-           available_users: available_users
+           available_users: available_users,
+           available_bots: available_bots
          )}
 
       {:error, _} ->
@@ -81,6 +84,38 @@ defmodule AutoforgeWeb.UserGroupShowLive do
     {:noreply, reload_group(socket)}
   end
 
+  def handle_event("add_bot", %{"bot_id" => bot_id}, socket) do
+    current_user = socket.assigns.current_user
+    group = socket.assigns.group
+
+    BotUserGroup
+    |> AshPhoenix.Form.for_create(:create, actor: current_user)
+    |> AshPhoenix.Form.submit(params: %{"user_group_id" => group.id, "bot_id" => bot_id})
+    |> case do
+      {:ok, _} ->
+        {:noreply, reload_group(socket)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to add bot.")}
+    end
+  end
+
+  def handle_event("remove_bot", %{"bot_id" => bot_id}, socket) do
+    current_user = socket.assigns.current_user
+    group = socket.assigns.group
+
+    bot_group =
+      BotUserGroup
+      |> Ash.Query.filter(user_group_id == ^group.id and bot_id == ^bot_id)
+      |> Ash.read_one!(actor: current_user)
+
+    if bot_group do
+      Ash.destroy!(bot_group, actor: current_user)
+    end
+
+    {:noreply, reload_group(socket)}
+  end
+
   defp reload_group(socket) do
     current_user = socket.assigns.current_user
     group_id = socket.assigns.group.id
@@ -88,10 +123,12 @@ defmodule AutoforgeWeb.UserGroupShowLive do
     case load_group(group_id, current_user) do
       {:ok, group} when not is_nil(group) ->
         available_users = load_available_users(group, current_user)
+        available_bots = load_available_bots(group, current_user)
 
         assign(socket,
           group: group,
-          available_users: available_users
+          available_users: available_users,
+          available_bots: available_bots
         )
 
       _ ->
@@ -104,7 +141,7 @@ defmodule AutoforgeWeb.UserGroupShowLive do
   defp load_group(id, actor) do
     UserGroup
     |> Ash.Query.filter(id == ^id)
-    |> Ash.Query.load([:members])
+    |> Ash.Query.load([:members, :bots])
     |> Ash.read_one(actor: actor)
   end
 
@@ -115,6 +152,15 @@ defmodule AutoforgeWeb.UserGroupShowLive do
     |> Ash.Query.sort(email: :asc)
     |> Ash.read!(actor: actor)
     |> Enum.reject(&(&1.id in member_ids))
+  end
+
+  defp load_available_bots(group, actor) do
+    assigned_bot_ids = Enum.map(group.bots, & &1.id)
+
+    Bot
+    |> Ash.Query.sort(name: :asc)
+    |> Ash.read!(actor: actor)
+    |> Enum.reject(&(&1.id in assigned_bot_ids))
   end
 
   @impl true
@@ -167,7 +213,7 @@ defmodule AutoforgeWeb.UserGroupShowLive do
           </div>
         </div>
 
-        <div class="card bg-base-200 shadow-sm">
+        <div class="card bg-base-200 shadow-sm mb-6">
           <div class="card-body">
             <div class="flex items-center gap-2 mb-4">
               <h2 class="text-lg font-semibold">Members</h2>
@@ -224,6 +270,67 @@ defmodule AutoforgeWeb.UserGroupShowLive do
                         phx-click="remove_member"
                         phx-value-user_id={member.id}
                         data-confirm="Remove this member from the group?"
+                      >
+                        <.icon name="hero-x-mark" class="w-4 h-4" />
+                      </.button>
+                    </:cell>
+                  </.table_row>
+                </.table_body>
+              </.table>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body">
+            <div class="flex items-center gap-2 mb-4">
+              <h2 class="text-lg font-semibold">Bots</h2>
+              <span class="badge badge-sm">{length(@group.bots)}</span>
+            </div>
+
+            <%= if @available_bots != [] do %>
+              <.form
+                for={%{}}
+                phx-submit="add_bot"
+                class="flex items-end gap-3 mb-4"
+              >
+                <div class="flex-1">
+                  <label class="text-sm font-medium mb-1 block">Add a bot</label>
+                  <select name="bot_id" class="select select-bordered w-full">
+                    <option :for={bot <- @available_bots} value={bot.id}>
+                      {bot.name}
+                    </option>
+                  </select>
+                </div>
+                <.button type="submit" variant="solid" color="primary" size="sm">
+                  <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Add
+                </.button>
+              </.form>
+            <% end %>
+
+            <%= if @group.bots == [] do %>
+              <p class="text-sm text-base-content/50">No bots assigned yet.</p>
+            <% else %>
+              <.table>
+                <.table_head>
+                  <:col class="w-full">Name</:col>
+                  <:col></:col>
+                </.table_head>
+                <.table_body>
+                  <.table_row :for={bot <- @group.bots}>
+                    <:cell class="w-full">
+                      <.link navigate={~p"/bots/#{bot.id}"} class="font-medium hover:underline">
+                        {bot.name}
+                      </.link>
+                    </:cell>
+                    <:cell>
+                      <.button
+                        variant="ghost"
+                        size="sm"
+                        color="danger"
+                        phx-click="remove_bot"
+                        phx-value-bot_id={bot.id}
+                        data-confirm="Remove this bot from the group?"
                       >
                         <.icon name="hero-x-mark" class="w-4 h-4" />
                       </.button>

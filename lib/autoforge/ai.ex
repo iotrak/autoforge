@@ -7,5 +7,6 @@ defmodule Autoforge.Ai do
 
   resources do
     resource Autoforge.Ai.Bot
+    resource Autoforge.Ai.BotUserGroup
   end
 end

@@ -57,6 +57,12 @@ defmodule Autoforge.Accounts.UserGroup do
       source_attribute_on_join_resource :user_group_id
       destination_attribute_on_join_resource :user_id
     end
+
+    many_to_many :bots, Autoforge.Ai.Bot do
+      through Autoforge.Ai.BotUserGroup
+      source_attribute_on_join_resource :user_group_id
+      destination_attribute_on_join_resource :bot_id
+    end
   end
 
   identities do

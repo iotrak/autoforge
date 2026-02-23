@@ -12,9 +12,15 @@ defmodule AutoforgeWeb.ConversationFormLive do
   def mount(params, _session, socket) do
     user = socket.assigns.current_user
 
+    user_group_ids =
+      user
+      |> Ash.load!(:user_groups, actor: user)
+      |> Map.get(:user_groups)
+      |> Enum.map(& &1.id)
+
     bots =
       Bot
-      |> Ash.Query.filter(user_id == ^user.id)
+      |> Ash.Query.filter(exists(user_groups, id in ^user_group_ids))
       |> Ash.Query.sort(name: :asc)
       |> Ash.read!(actor: user)
 

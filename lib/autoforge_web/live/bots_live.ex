@@ -13,7 +13,6 @@ defmodule AutoforgeWeb.BotsLive do
 
     bots =
       Bot
-      |> Ash.Query.filter(user_id == ^user.id)
       |> Ash.Query.sort(inserted_at: :desc)
       |> Ash.read!(actor: user)
 
@@ -31,7 +30,6 @@ defmodule AutoforgeWeb.BotsLive do
 
     bots =
       Bot
-      |> Ash.Query.filter(user_id == ^user.id)
       |> Ash.Query.sort(inserted_at: :desc)
       |> Ash.read!(actor: user)
 
@@ -106,7 +104,9 @@ defmodule AutoforgeWeb.BotsLive do
             <.table_body>
               <.table_row :for={bot <- @bots}>
                 <:cell>
-                  <span class="font-medium">{bot.name}</span>
+                  <.link navigate={~p"/bots/#{bot.id}"} class="font-medium hover:underline">
+                    {bot.name}
+                  </.link>
                 </:cell>
                 <:cell>
                   <% {provider_name, model_name} = format_model(bot.model) %>
@@ -128,6 +128,9 @@ defmodule AutoforgeWeb.BotsLive do
                         <.icon name="hero-ellipsis-horizontal" class="w-5 h-5" />
                       </button>
                     </:toggle>
+                    <.dropdown_link navigate={~p"/bots/#{bot.id}"}>
+                      <.icon name="hero-eye" class="w-4 h-4 mr-2" /> View
+                    </.dropdown_link>
                     <.dropdown_link navigate={~p"/conversations/new?bot_id=#{bot.id}"}>
                       <.icon name="hero-chat-bubble-left-right" class="w-4 h-4 mr-2" /> Chat
                     </.dropdown_link>

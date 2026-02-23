@@ -42,7 +42,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
   end
 
   defp load_bot(bot_id) do
-    case Ash.get(Bot, bot_id, load: [:user, :llm_provider_key], authorize?: false) do
+    case Ash.get(Bot, bot_id, load: [:llm_provider_key], authorize?: false) do
       {:ok, nil} -> {:cancel, "bot not found: #{bot_id}"}
       {:ok, bot} -> {:ok, bot}
       {:error, reason} -> {:cancel, "failed to load bot: #{inspect(reason)}"}

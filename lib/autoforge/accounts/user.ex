@@ -155,8 +155,6 @@ defmodule Autoforge.Accounts.User do
   end
 
   relationships do
-    has_many :bots, Autoforge.Ai.Bot
-
     many_to_many :user_groups, Autoforge.Accounts.UserGroup do
       through Autoforge.Accounts.UserGroupMembership
       source_attribute_on_join_resource :user_id

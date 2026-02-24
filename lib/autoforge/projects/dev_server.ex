@@ -163,6 +163,8 @@ defmodule Autoforge.Projects.DevServer do
 
     user_env_vars = build_user_env_vars(project)
 
+    tailscale_env = build_tailscale_env_vars(vars)
+
     exec_config = %{
       "AttachStdin" => false,
       "AttachStdout" => true,
@@ -183,7 +185,7 @@ defmodule Autoforge.Projects.DevServer do
           "DB_TEST_NAME=#{vars["db_test_name"]}",
           "DB_USER=#{vars["db_user"]}",
           "DB_PASSWORD=#{vars["db_password"]}"
-        ] ++ user_env_vars
+        ] ++ tailscale_env ++ user_env_vars
     }
 
     socket_path = docker_socket_path()
@@ -285,4 +287,11 @@ defmodule Autoforge.Projects.DevServer do
   end
 
   defp build_user_env_vars(_), do: []
+
+  defp build_tailscale_env_vars(%{"phx_host" => host, "app_url" => url})
+       when is_binary(host) and is_binary(url) do
+    ["APP_URL=#{url}", "PHX_HOST=#{host}"]
+  end
+
+  defp build_tailscale_env_vars(_), do: []
 end

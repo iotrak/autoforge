@@ -70,7 +70,13 @@ config :spark,
 config :autoforge,
   ecto_repos: [Autoforge.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Autoforge.Accounts, Autoforge.Ai, Autoforge.Chat, Autoforge.Projects],
+  ash_domains: [
+    Autoforge.Accounts,
+    Autoforge.Ai,
+    Autoforge.Chat,
+    Autoforge.Config,
+    Autoforge.Projects
+  ],
   ash_authentication: [return_error_on_invalid_magic_link_token?: true]
 
 # Configure the endpoint

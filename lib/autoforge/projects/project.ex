@@ -80,7 +80,15 @@ defmodule Autoforge.Projects.Project do
     end
 
     update :mark_running do
-      accept [:container_id, :db_container_id, :network_id, :host_port]
+      accept [
+        :container_id,
+        :db_container_id,
+        :network_id,
+        :host_port,
+        :tailscale_container_id,
+        :tailscale_hostname
+      ]
+
       require_atomic? false
       change transition_state(:running)
     end
@@ -184,6 +192,16 @@ defmodule Autoforge.Projects.Project do
     end
 
     attribute :host_port, :integer do
+      allow_nil? true
+      public? true
+    end
+
+    attribute :tailscale_container_id, :string do
+      allow_nil? true
+      public? true
+    end
+
+    attribute :tailscale_hostname, :string do
       allow_nil? true
       public? true
     end

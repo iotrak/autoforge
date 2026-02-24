@@ -182,6 +182,29 @@ defmodule Autoforge.Projects.Docker do
   end
 
   @doc """
+  Creates a Docker volume with the given name.
+  """
+  def create_volume(name) do
+    case docker_req(:post, "/volumes/create", json: %{"Name" => name}) do
+      {:ok, %{status: 201}} -> {:ok, name}
+      {:ok, %{body: body}} -> {:error, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Removes a Docker volume by name.
+  """
+  def remove_volume(name) do
+    case docker_req(:delete, "/volumes/#{name}") do
+      {:ok, %{status: 204}} -> :ok
+      {:ok, %{status: 404}} -> :ok
+      {:ok, %{body: body}} -> {:error, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Runs a command inside a container, streaming output chunks to a callback.
 
   Similar to `exec_run/3`, but instead of collecting all output, it opens a raw

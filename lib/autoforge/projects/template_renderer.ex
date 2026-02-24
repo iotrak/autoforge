@@ -42,14 +42,35 @@ defmodule Autoforge.Projects.TemplateRenderer do
       "db_password" => db_password
     }
 
-    case project do
-      %{env_vars: vars} when is_list(vars) ->
-        Enum.reduce(vars, base, fn var, acc ->
-          Map.put(acc, "env_#{String.downcase(var.key)}", var.value)
-        end)
+    base =
+      case project do
+        %{env_vars: vars} when is_list(vars) ->
+          Enum.reduce(vars, base, fn var, acc ->
+            Map.put(acc, "env_#{String.downcase(var.key)}", var.value)
+          end)
 
-      _ ->
-        base
+        _ ->
+          base
+      end
+
+    maybe_add_tailscale_vars(base, project)
+  end
+
+  defp maybe_add_tailscale_vars(vars, %{tailscale_hostname: hostname})
+       when is_binary(hostname) do
+    case Autoforge.Projects.Tailscale.get_tailnet_name() do
+      {:ok, tailnet} ->
+        url = Autoforge.Projects.Tailscale.build_url(hostname, tailnet)
+
+        Map.merge(vars, %{
+          "app_url" => url,
+          "phx_host" => "#{hostname}.#{tailnet}"
+        })
+
+      :disabled ->
+        vars
     end
   end
+
+  defp maybe_add_tailscale_vars(vars, _), do: vars
 end

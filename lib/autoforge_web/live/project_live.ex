@@ -225,6 +225,19 @@ defmodule AutoforgeWeb.ProjectLive do
 
   defp has_dev_server_script?(_), do: false
 
+  defp project_url(%{tailscale_hostname: hostname}) when is_binary(hostname) do
+    case Autoforge.Projects.Tailscale.get_tailnet_name() do
+      {:ok, tailnet} -> "https://#{hostname}.#{tailnet}"
+      :disabled -> nil
+    end
+  end
+
+  defp project_url(%{host_port: port}) when is_integer(port) do
+    "http://localhost:#{port}"
+  end
+
+  defp project_url(_), do: nil
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -298,8 +311,8 @@ defmodule AutoforgeWeb.ProjectLive do
               </.dropdown_button>
 
               <.dropdown_link
-                :if={@dev_server_running && @project.host_port}
-                href={"http://localhost:#{@project.host_port}"}
+                :if={@dev_server_running && (@project.tailscale_hostname || @project.host_port)}
+                href={project_url(@project)}
                 target="_blank"
               >
                 <.icon name="hero-arrow-top-right-on-square" class="icon w-4 h-4" /> Open in Browser

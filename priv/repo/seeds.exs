@@ -398,7 +398,7 @@ ash_phoenix_template =
 
             echo "PATH=$HOME/.local/bin:$PATH" >> $HOME/.bashrc
 
-            claude mcp add --transport http tidewave http://localhost:4000/tidewave/mcp
+            /root/.local/bin/claude mcp add --transport http tidewave http://localhost:4000/tidewave/mcp
 
             git config --global init.defaultBranch main
 

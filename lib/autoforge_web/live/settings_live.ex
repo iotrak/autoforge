@@ -25,6 +25,12 @@ defmodule AutoforgeWeb.SettingsLive do
           id="llm-keys"
           current_user={@current_user}
         />
+
+        <.live_component
+          module={AutoforgeWeb.TailscaleConfigComponent}
+          id="tailscale-config"
+          current_user={@current_user}
+        />
       </div>
     </Layouts.app>
     """

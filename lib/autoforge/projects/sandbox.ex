@@ -3,7 +3,7 @@ defmodule Autoforge.Projects.Sandbox do
   High-level orchestration module for project sandbox lifecycle.
   """
 
-  alias Autoforge.Projects.{Docker, ProjectTemplateFile, TarBuilder, TemplateRenderer}
+  alias Autoforge.Projects.{Docker, ProjectTemplateFile, Tailscale, TarBuilder, TemplateRenderer}
 
   require Ash.Query
   require Logger
@@ -53,6 +53,9 @@ defmodule Autoforge.Projects.Sandbox do
              create_app_container(project, network_id, host_port)
            end),
          :ok <- Docker.start_container(app_container_id),
+         {ts_container_id, ts_hostname} <-
+           maybe_create_tailscale_sidecar(project, app_container_id),
+         variables <- maybe_add_tailscale_vars(variables, ts_hostname),
          :ok <-
            log_and_run(project, "Uploading template files...", fn ->
              upload_template_files(app_container_id, project, variables)
@@ -66,7 +69,9 @@ defmodule Autoforge.Projects.Sandbox do
                container_id: app_container_id,
                db_container_id: db_container_id,
                network_id: network_id,
-               host_port: host_port
+               host_port: host_port,
+               tailscale_container_id: ts_container_id,
+               tailscale_hostname: ts_hostname
              },
              action: :mark_running,
              authorize?: false
@@ -92,6 +97,7 @@ defmodule Autoforge.Projects.Sandbox do
   def start(project) do
     with :ok <- Docker.start_container(project.db_container_id),
          :ok <- Docker.start_container(project.container_id),
+         :ok <- maybe_start_tailscale(project),
          {:ok, project} <- Ash.update(project, %{}, action: :start, authorize?: false) do
       {:ok, project}
     else
@@ -105,7 +111,8 @@ defmodule Autoforge.Projects.Sandbox do
   Stops a running project by stopping its containers.
   """
   def stop(project) do
-    with :ok <- Docker.stop_container(project.container_id),
+    with :ok <- maybe_stop_tailscale(project),
+         :ok <- Docker.stop_container(project.container_id),
          :ok <- Docker.stop_container(project.db_container_id),
          {:ok, project} <- Ash.update(project, %{}, action: :stop, authorize?: false) do
       {:ok, project}
@@ -121,6 +128,8 @@ defmodule Autoforge.Projects.Sandbox do
   """
   def destroy(project) do
     with {:ok, project} <- Ash.update(project, %{}, action: :begin_destroy, authorize?: false) do
+      Tailscale.remove_sidecar(project)
+
       if project.container_id do
         Docker.stop_container(project.container_id, timeout: 5)
         Docker.remove_container(project.container_id, force: true)
@@ -364,4 +373,49 @@ defmodule Autoforge.Projects.Sandbox do
         []
     end
   end
+
+  defp maybe_create_tailscale_sidecar(project, app_container_id) do
+    case Tailscale.create_sidecar(project, app_container_id) do
+      {:ok, container_id, hostname} ->
+        broadcast_provision_log(project, "Starting Tailscale sidecar...")
+        {container_id, hostname}
+
+      :disabled ->
+        {nil, nil}
+
+      {:error, reason} ->
+        Logger.warning("Tailscale sidecar failed, continuing without: #{inspect(reason)}")
+        broadcast_provision_log(project, "Tailscale sidecar failed, continuing without")
+        {nil, nil}
+    end
+  end
+
+  defp maybe_add_tailscale_vars(variables, nil), do: variables
+
+  defp maybe_add_tailscale_vars(variables, hostname) do
+    case Tailscale.get_tailnet_name() do
+      {:ok, tailnet} ->
+        url = Tailscale.build_url(hostname, tailnet)
+
+        Map.merge(variables, %{
+          "app_url" => url,
+          "phx_host" => "#{hostname}.#{tailnet}"
+        })
+
+      :disabled ->
+        variables
+    end
+  end
+
+  defp maybe_start_tailscale(%{tailscale_container_id: id}) when is_binary(id) do
+    Docker.start_container(id)
+  end
+
+  defp maybe_start_tailscale(_), do: :ok
+
+  defp maybe_stop_tailscale(%{tailscale_container_id: id}) when is_binary(id) do
+    Docker.stop_container(id)
+  end
+
+  defp maybe_stop_tailscale(_), do: :ok
 end

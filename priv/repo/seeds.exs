@@ -417,6 +417,7 @@ ash_phoenix_template =
             mv {{ project_path }}/.gitignore .
             mv {{ project_path }}/.git .
             rm -rf {{ project_path }}
+            ln -s AGENTS.md CLAUDE.md
 
             sed -i 's/username: "postgres"/username: "{{ db_user }}"/' config/dev.exs
             sed -i 's/password: "postgres"/password: "{{ db_password }}"/' config/dev.exs

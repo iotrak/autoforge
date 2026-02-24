@@ -137,7 +137,7 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
                   label="Bootstrap Script"
                   placeholder="#!/bin/sh"
                   rows={8}
-                  class="font-mono text-sm bg-base-300 border-base-300 rounded-lg px-3 py-2 w-full"
+                  class="font-mono text-sm bg-base-300 border-base-300 rounded-lg px-3 py-2 w-full max-h-80 overflow-y-auto"
                 />
                 <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-base-content/50">
                   <span>Variables:</span>
@@ -159,7 +159,7 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
                   label="Dev Server Script"
                   placeholder="mix ecto.setup\nmix phx.server"
                   rows={5}
-                  class="font-mono text-sm bg-base-300 border-base-300 rounded-lg px-3 py-2 w-full"
+                  class="font-mono text-sm bg-base-300 border-base-300 rounded-lg px-3 py-2 w-full max-h-80 overflow-y-auto"
                 />
                 <p class="mt-1.5 text-xs text-base-content/50">
                   Multi-line script to start the dev server. Each line runs in sequence.

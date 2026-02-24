@@ -60,6 +60,10 @@ defmodule Autoforge.Projects.Tailscale do
         volume_name = "autoforge-ts-#{project.id}"
         auth_key = build_auth_key(config)
 
+        # Remove stale container from a previous failed attempt
+        container_name = "autoforge-ts-#{project.id}"
+        Docker.remove_container(container_name, force: true)
+
         with :ok <- Docker.pull_image("tailscale/tailscale:latest"),
              {:ok, _} <- Docker.create_volume(volume_name),
              {:ok, container_id} <-
@@ -80,8 +84,8 @@ defmodule Autoforge.Projects.Tailscale do
               "Failed to create Tailscale sidecar for project #{project.id}: #{inspect(reason)}"
             )
 
-            # Clean up on failure
-            Docker.remove_volume(volume_name)
+            # Clean up failed container, keep volume for retry
+            Docker.remove_container(container_name, force: true)
             {:error, reason}
         end
 

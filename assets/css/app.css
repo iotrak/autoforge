@@ -35,6 +35,25 @@
   --border-base: light-dark(var(--color-stone-200), var(--color-stone-700));
   --focus: light-dark(var(--color-orange-400), var(--color-orange-500));
   --focus-danger: light-dark(var(--color-red-400), var(--color-red-400));
+
+  /* Override Fluxon soft colors with opaque color-mix() equivalents.
+     The Fluxon theme uses --alpha() which may not resolve in plain CSS. */
+  --info-soft: light-dark(
+    color-mix(in oklab, var(--color-blue-600) 10%, white),
+    color-mix(in oklab, var(--color-blue-600) 20%, var(--color-stone-900))
+  );
+  --danger-soft: light-dark(
+    color-mix(in oklab, var(--color-red-600) 10%, white),
+    color-mix(in oklab, var(--color-red-600) 20%, var(--color-stone-900))
+  );
+  --success-soft: light-dark(
+    color-mix(in oklab, var(--color-green-600) 10%, white),
+    color-mix(in oklab, var(--color-green-600) 20%, var(--color-stone-900))
+  );
+  --warning-soft: light-dark(
+    color-mix(in oklab, var(--color-amber-400) 10%, white),
+    color-mix(in oklab, var(--color-amber-400) 20%, var(--color-stone-900))
+  );
 }
 
 [data-theme="light"] { color-scheme: light; }

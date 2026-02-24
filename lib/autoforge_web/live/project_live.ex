@@ -265,61 +265,61 @@ defmodule AutoforgeWeb.ProjectLive do
           </div>
 
           <div class="flex items-center gap-1.5 flex-shrink-0">
-            <.button
-              :if={
-                @project.state == :running && !@dev_server_running && has_dev_server_script?(@project)
-              }
-              phx-click="start_dev_server"
-              variant="outline"
-              size="xs"
-              color="success"
-            >
-              <.icon name="hero-globe-alt" class="w-3.5 h-3.5 mr-1" /> Start Server
-            </.button>
-            <.button
-              :if={@project.state == :running && @dev_server_running}
-              phx-click="stop_dev_server"
-              variant="outline"
-              size="xs"
-              color="warning"
-            >
-              <.icon name="hero-globe-alt" class="w-3.5 h-3.5 mr-1" /> Stop Server
-            </.button>
-            <.link
-              :if={@dev_server_running && @project.host_port}
-              href={"http://localhost:#{@project.host_port}"}
-              target="_blank"
-              class="btn btn-xs btn-outline btn-primary"
-            >
-              <.icon name="hero-arrow-top-right-on-square" class="w-3.5 h-3.5 mr-1" /> Open
-            </.link>
-            <.button
-              :if={@project.state == :stopped}
-              phx-click="start"
-              variant="solid"
-              color="primary"
-              size="xs"
-            >
-              <.icon name="hero-play" class="w-3.5 h-3.5 mr-1" /> Start
-            </.button>
-            <.button
-              :if={@project.state == :running}
-              phx-click="stop"
-              variant="outline"
-              size="xs"
-            >
-              <.icon name="hero-stop" class="w-3.5 h-3.5 mr-1" /> Stop
-            </.button>
-            <.button
-              :if={@project.state in [:running, :stopped, :error]}
-              phx-click="destroy"
-              data-confirm="Are you sure? This will permanently destroy the project and its containers."
-              variant="ghost"
-              size="xs"
-              class="text-error"
-            >
-              <.icon name="hero-trash" class="w-3.5 h-3.5" />
-            </.button>
+            <.dropdown placement="bottom-end" class="w-52">
+              <:toggle>
+                <.button variant="outline" size="xs">
+                  <.icon name="hero-ellipsis-vertical" class="w-4 h-4" />
+                </.button>
+              </:toggle>
+
+              <.dropdown_button
+                :if={
+                  @project.state == :running && !@dev_server_running &&
+                    has_dev_server_script?(@project)
+                }
+                phx-click="start_dev_server"
+              >
+                <.icon name="hero-globe-alt" class="icon w-4 h-4" /> Start Server
+              </.dropdown_button>
+
+              <.dropdown_button
+                :if={@project.state == :running && @dev_server_running}
+                phx-click="stop_dev_server"
+              >
+                <.icon name="hero-globe-alt" class="icon w-4 h-4" /> Stop Server
+              </.dropdown_button>
+
+              <.dropdown_link
+                :if={@dev_server_running && @project.host_port}
+                href={"http://localhost:#{@project.host_port}"}
+                target="_blank"
+              >
+                <.icon name="hero-arrow-top-right-on-square" class="icon w-4 h-4" /> Open in Browser
+              </.dropdown_link>
+
+              <.dropdown_separator :if={
+                @project.state == :running && has_dev_server_script?(@project)
+              } />
+
+              <.dropdown_button :if={@project.state == :stopped} phx-click="start">
+                <.icon name="hero-play" class="icon w-4 h-4" /> Start
+              </.dropdown_button>
+
+              <.dropdown_button :if={@project.state == :running} phx-click="stop">
+                <.icon name="hero-stop" class="icon w-4 h-4" /> Stop
+              </.dropdown_button>
+
+              <.dropdown_separator :if={@project.state in [:running, :stopped, :error]} />
+
+              <.dropdown_button
+                :if={@project.state in [:running, :stopped, :error]}
+                phx-click="destroy"
+                data-confirm="Are you sure? This will permanently destroy the project and its containers."
+                class="text-red-500"
+              >
+                <.icon name="hero-trash" class="icon w-4 h-4" /> Destroy
+              </.dropdown_button>
+            </.dropdown>
           </div>
         </div>
 

@@ -168,7 +168,7 @@ defmodule Autoforge.Projects.DevServer do
       "AttachStdout" => true,
       "AttachStderr" => true,
       "Tty" => true,
-      "Cmd" => ["/bin/sh", "-c", wrapped],
+      "Cmd" => ["/bin/bash", "-c", wrapped],
       "WorkingDir" => "/app",
       "Env" =>
         [

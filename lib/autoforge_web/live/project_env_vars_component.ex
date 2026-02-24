@@ -114,24 +114,24 @@ defmodule AutoforgeWeb.ProjectEnvVarsComponent do
   def render(assigns) do
     ~H"""
     <div>
-      <div class="flex items-center justify-between mb-4">
-        <div>
+      <div class="mb-4">
+        <div class="flex items-center justify-between">
           <h2 class="text-xl font-semibold tracking-tight">Environment Variables</h2>
-          <p class="mt-1 text-sm text-base-content/70">
-            Manage environment variables injected into your project containers.
-            New terminals and dev server sessions will pick up changes automatically.
-          </p>
+          <.button
+            :if={@form == nil}
+            phx-click="new"
+            phx-target={@myself}
+            variant="solid"
+            color="primary"
+            size="sm"
+          >
+            <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Add Variable
+          </.button>
         </div>
-        <.button
-          :if={@form == nil}
-          phx-click="new"
-          phx-target={@myself}
-          variant="solid"
-          color="primary"
-          size="sm"
-        >
-          <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Add Variable
-        </.button>
+        <p class="mt-1 text-sm text-base-content/70">
+          Manage environment variables injected into your project containers.
+          New terminals and dev server sessions will pick up changes automatically.
+        </p>
       </div>
 
       <%= if @form do %>

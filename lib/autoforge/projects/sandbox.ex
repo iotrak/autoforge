@@ -180,7 +180,7 @@ defmodule Autoforge.Projects.Sandbox do
       content = if lines == "", do: "", else: lines <> "\n"
 
       Docker.exec_run(project.container_id, [
-        "/bin/sh",
+        "/bin/bash",
         "-c",
         "cat > /app/.autoforge.env << 'AUTOFORGE_EOF'\n#{content}AUTOFORGE_EOF"
       ])
@@ -337,7 +337,7 @@ defmodule Autoforge.Projects.Sandbox do
           broadcast_provision_log(project, {:output, chunk})
         end
 
-        case Docker.exec_stream(container_id, ["/bin/sh", "-c", script], callback,
+        case Docker.exec_stream(container_id, ["/bin/bash", "-c", script], callback,
                working_dir: "/app"
              ) do
           {:ok, 0} ->

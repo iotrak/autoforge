@@ -122,18 +122,25 @@ defmodule AutoforgeWeb.ProjectLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_user={@current_user} active_page={:projects}>
-      <div class="max-w-5xl mx-auto">
-        <div class="mb-6">
+    <Layouts.app
+      flash={@flash}
+      current_user={@current_user}
+      active_page={:projects}
+      full_width
+    >
+      <div class="flex flex-col h-full">
+        <%!-- Header Bar --%>
+        <div class="flex items-center gap-4 px-4 py-3 border-b border-base-300 bg-base-100 flex-shrink-0">
           <.link
             navigate={~p"/projects"}
-            class="text-sm text-base-content/60 hover:text-base-content transition-colors"
+            class="text-base-content/50 hover:text-base-content transition-colors"
           >
-            <.icon name="hero-arrow-left" class="w-4 h-4 inline-block mr-1" /> Back to Projects
+            <.icon name="hero-arrow-left" class="w-5 h-5" />
           </.link>
-          <div class="flex items-center gap-3 mt-2">
-            <h1 class="text-2xl font-bold tracking-tight">{@project.name}</h1>
-            <span class={"badge #{state_badge_class(@project.state)}"}>
+
+          <div class="flex items-center gap-3 min-w-0">
+            <h1 class="text-lg font-semibold tracking-tight truncate">{@project.name}</h1>
+            <span class={"badge badge-sm #{state_badge_class(@project.state)}"}>
               <span
                 :if={state_animating?(@project.state)}
                 class="loading loading-spinner loading-xs mr-1"
@@ -141,124 +148,86 @@ defmodule AutoforgeWeb.ProjectLive do
               {@project.state}
             </span>
           </div>
-        </div>
 
-        <%!-- Action Buttons --%>
-        <div class="flex items-center gap-2 mb-6">
-          <.button
-            :if={@project.state == :stopped}
-            phx-click="start"
-            variant="solid"
-            color="primary"
-            size="sm"
-          >
-            <.icon name="hero-play" class="w-4 h-4 mr-1" /> Start
-          </.button>
-          <.button
-            :if={@project.state == :running}
-            phx-click="stop"
-            variant="outline"
-            size="sm"
-          >
-            <.icon name="hero-stop" class="w-4 h-4 mr-1" /> Stop
-          </.button>
-          <.button
-            :if={@project.state in [:running, :stopped, :error]}
-            phx-click="destroy"
-            data-confirm="Are you sure? This will permanently destroy the project and its containers."
-            variant="ghost"
-            size="sm"
-            class="text-error"
-          >
-            <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Destroy
-          </.button>
-        </div>
+          <div class="flex items-center gap-1.5 text-sm text-base-content/50 ml-auto flex-shrink-0">
+            <span :if={@project.project_template}>
+              {@project.project_template.name}
+            </span>
+            <span :if={@project.container_id} class="font-mono text-xs">
+              {String.slice(@project.container_id, 0..11)}
+            </span>
+          </div>
 
-        <%!-- Error Panel --%>
-        <div :if={@project.state == :error && @project.error_message} class="mb-6">
-          <div class="card bg-error/10 border border-error/30">
-            <div class="card-body py-3">
-              <div class="flex items-start gap-2">
-                <.icon
-                  name="hero-exclamation-triangle"
-                  class="w-5 h-5 text-error flex-shrink-0 mt-0.5"
-                />
-                <div>
-                  <p class="font-medium text-error">Provisioning Error</p>
-                  <p class="text-sm text-base-content/70 mt-1 font-mono whitespace-pre-wrap">
-                    {@project.error_message}
-                  </p>
-                </div>
-              </div>
-            </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            <.button
+              :if={@project.state == :stopped}
+              phx-click="start"
+              variant="solid"
+              color="primary"
+              size="xs"
+            >
+              <.icon name="hero-play" class="w-3.5 h-3.5 mr-1" /> Start
+            </.button>
+            <.button
+              :if={@project.state == :running}
+              phx-click="stop"
+              variant="outline"
+              size="xs"
+            >
+              <.icon name="hero-stop" class="w-3.5 h-3.5 mr-1" /> Stop
+            </.button>
+            <.button
+              :if={@project.state in [:running, :stopped, :error]}
+              phx-click="destroy"
+              data-confirm="Are you sure? This will permanently destroy the project and its containers."
+              variant="ghost"
+              size="xs"
+              class="text-error"
+            >
+              <.icon name="hero-trash" class="w-3.5 h-3.5" />
+            </.button>
           </div>
         </div>
 
-        <%!-- Provision Log Panel --%>
+        <%!-- Error Banner --%>
         <div
-          :if={@provision_log_started and @project.state in [:creating, :provisioning, :error]}
-          class="card bg-[#1c1917] shadow-sm mb-6 border border-base-300/30"
+          :if={@project.state == :error && @project.error_message}
+          class="px-4 py-2 bg-error/10 border-b border-error/30 flex items-center gap-2 flex-shrink-0"
         >
-          <div class="px-4 py-2 border-b border-stone-800 flex items-center gap-2">
-            <span
-              :if={@project.state in [:creating, :provisioning]}
-              class="loading loading-spinner loading-xs text-amber-400"
-            />
-            <.icon
-              :if={@project.state == :error}
-              name="hero-exclamation-triangle"
-              class="w-4 h-4 text-error"
-            />
-            <span class="text-sm font-medium text-stone-300">Provisioning Log</span>
-          </div>
+          <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-error flex-shrink-0" />
+          <p class="text-sm text-error font-mono truncate">{@project.error_message}</p>
+        </div>
+
+        <%!-- Main Content Area --%>
+        <div class="flex-1 min-h-0">
+          <%!-- Provision Log --%>
           <div
-            id="provision-log"
-            phx-hook="ProvisionLog"
-            phx-update="ignore"
-            class="h-80"
-          />
-        </div>
-
-        <%!-- Info Card --%>
-        <div class="card bg-base-200 shadow-sm mb-6">
-          <div class="card-body py-4">
-            <div class="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span class="text-base-content/50">Template</span>
-                <p class="font-medium mt-0.5">
-                  {if @project.project_template, do: @project.project_template.name, else: "—"}
-                </p>
-              </div>
-              <div>
-                <span class="text-base-content/50">Created</span>
-                <p class="font-medium mt-0.5">
-                  <.local_time value={@project.inserted_at} user={@current_user} />
-                </p>
-              </div>
-              <div>
-                <span class="text-base-content/50">Container ID</span>
-                <p class="font-mono text-xs mt-0.5 truncate">
-                  {String.slice(@project.container_id || "—", 0..11)}
-                </p>
-              </div>
-              <div>
-                <span class="text-base-content/50">Last Activity</span>
-                <p class="font-medium mt-0.5">
-                  <%= if @project.last_activity_at do %>
-                    <.local_time value={@project.last_activity_at} user={@current_user} />
-                  <% else %>
-                    —
-                  <% end %>
-                </p>
-              </div>
+            :if={@provision_log_started and @project.state in [:creating, :provisioning, :error]}
+            class="h-full flex flex-col bg-[#1c1917]"
+          >
+            <div class="px-4 py-2 border-b border-stone-800 flex items-center gap-2 flex-shrink-0">
+              <span
+                :if={@project.state in [:creating, :provisioning]}
+                class="loading loading-spinner loading-xs text-amber-400"
+              />
+              <.icon
+                :if={@project.state == :error}
+                name="hero-exclamation-triangle"
+                class="w-4 h-4 text-error"
+              />
+              <span class="text-sm font-medium text-stone-300">Provisioning Log</span>
             </div>
+            <div
+              id="provision-log"
+              phx-hook="ProvisionLog"
+              phx-update="ignore"
+              class="flex-1 min-h-0"
+            />
           </div>
-        </div>
 
-        <%!-- Terminal Panel --%>
-        <div :if={@project.state == :running} class="card bg-base-200 shadow-sm">
-          <div class="card-body p-0">
-            <div class="px-4 py-2 border-b border-base-300 flex items-center gap-2">
+          <%!-- Terminal --%>
+          <div :if={@project.state == :running} class="h-full flex flex-col">
+            <div class="px-4 py-2 border-b border-base-300 flex items-center gap-2 flex-shrink-0">
               <.icon name="hero-command-line" class="w-4 h-4 text-base-content/50" />
               <span class="text-sm font-medium">Terminal</span>
             </div>
@@ -268,8 +237,33 @@ defmodule AutoforgeWeb.ProjectLive do
               phx-update="ignore"
               data-project-id={@project.id}
               data-user-token={@user_token}
-              class="h-96"
+              class="flex-1 min-h-0"
             />
+          </div>
+
+          <%!-- Idle State (stopped/creating without logs) --%>
+          <div
+            :if={
+              @project.state in [:stopped, :destroyed, :destroying] or
+                (@project.state in [:creating, :provisioning] and not @provision_log_started)
+            }
+            class="h-full flex items-center justify-center text-base-content/30"
+          >
+            <div class="text-center">
+              <.icon name="hero-cube-transparent" class="w-12 h-12 mx-auto mb-3" />
+              <p class="text-sm">
+                <%= case @project.state do %>
+                  <% :stopped -> %>
+                    Project is stopped
+                  <% :destroying -> %>
+                    Destroying project...
+                  <% :destroyed -> %>
+                    Project has been destroyed
+                  <% _ -> %>
+                    Preparing project...
+                <% end %>
+              </p>
+            </div>
           </div>
         </div>
       </div>

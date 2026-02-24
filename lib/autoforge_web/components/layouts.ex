@@ -36,6 +36,10 @@ defmodule AutoforgeWeb.Layouts do
     default: nil,
     doc: "the currently active page for nav highlighting"
 
+  attr :full_width, :boolean,
+    default: false,
+    doc: "when true, removes content padding for full-bleed workspace layouts"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -137,8 +141,8 @@ defmodule AutoforgeWeb.Layouts do
         </div>
       </aside>
 
-      <main class="flex-1 overflow-y-auto">
-        <div class="px-4 py-6 sm:px-6 lg:px-8">
+      <main class={["flex-1 overflow-y-auto", @full_width && "flex flex-col"]}>
+        <div class={if @full_width, do: "flex-1 flex flex-col", else: "px-4 py-6 sm:px-6 lg:px-8"}>
           {render_slot(@inner_block)}
         </div>
 

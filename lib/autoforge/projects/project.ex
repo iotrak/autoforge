@@ -133,7 +133,7 @@ defmodule Autoforge.Projects.Project do
   pub_sub do
     module AutoforgeWeb.Endpoint
     prefix "project"
-    publish_all :update, ["updated", :id]
+    publish_all :update, ["updated", [:id, nil]]
   end
 
   attributes do

@@ -21,7 +21,10 @@ defmodule AutoforgeWeb.ProjectsLive do
   end
 
   @impl true
-  def handle_info(%Ash.Notifier.Notification{}, socket) do
+  def handle_info(
+        %Phoenix.Socket.Broadcast{payload: %Ash.Notifier.Notification{}},
+        socket
+      ) do
     projects = load_projects(socket.assigns.current_user)
     {:noreply, assign(socket, projects: projects)}
   end

@@ -26,6 +26,7 @@ import { hooks as colocatedHooks } from "phoenix-colocated/autoforge";
 import topbar from "../vendor/topbar";
 import { Hooks as FluxonHooks, DOM as FluxonDOM } from "fluxon";
 import TerminalHook, { ProvisionLogHook } from "./hooks/terminal";
+import SortableTableHook from "./hooks/sortable_table";
 
 const ChatScroll = {
   mounted() {
@@ -266,7 +267,7 @@ const csrfToken = document
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
-  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput, Terminal: TerminalHook, ProvisionLog: ProvisionLogHook },
+  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput, Terminal: TerminalHook, ProvisionLog: ProvisionLogHook, SortableTable: SortableTableHook },
   dom: {
     onBeforeElUpdated(from, to) {
       FluxonDOM.onBeforeElUpdated(from, to);

@@ -64,7 +64,11 @@ defmodule AutoforgeWeb.ModelsLive do
         </div>
 
         <div :if={@provider_groups != []} class="space-y-10">
-          <section :for={{provider, models} <- @provider_groups} id={"provider-#{provider.id}"}>
+          <section
+            :for={{provider, models} <- @provider_groups}
+            id={"provider-#{provider.id}"}
+            phx-hook="SortableTable"
+          >
             <div class="flex items-center gap-3 mb-4">
               <h2 class="text-lg font-semibold">{provider.name}</h2>
               <span class="text-xs text-base-content/50 bg-base-200 px-2 py-0.5 rounded-full">
@@ -74,18 +78,27 @@ defmodule AutoforgeWeb.ModelsLive do
 
             <.table>
               <.table_head>
-                <:col>Name</:col>
-                <:col>Model ID</:col>
-                <:col>Context</:col>
-                <:col>Max Output</:col>
-                <:col>Knowledge</:col>
-                <:col>Input / Output</:col>
+                <:col><.sort_header col="name" label="Name" /></:col>
+                <:col><.sort_header col="model" label="Model ID" /></:col>
+                <:col><.sort_header col="context" label="Context" /></:col>
+                <:col><.sort_header col="output" label="Max Output" /></:col>
+                <:col><.sort_header col="knowledge" label="Knowledge" /></:col>
+                <:col><.sort_header col="input_cost" label="Input / Output" /></:col>
                 <:col>Cache R / W</:col>
                 <:col>Capabilities</:col>
-                <:col>Released</:col>
+                <:col><.sort_header col="released" label="Released" /></:col>
               </.table_head>
               <.table_body>
-                <.table_row :for={model <- models}>
+                <.table_row
+                  :for={model <- models}
+                  data-sort-name={String.downcase(model.name || "")}
+                  data-sort-model={String.downcase(model.model || "")}
+                  data-sort-context={model.limits[:context] || 0}
+                  data-sort-output={model.limits[:output] || 0}
+                  data-sort-knowledge={model.knowledge || ""}
+                  data-sort-input_cost={(model.cost[:input] || 0) + (model.cost[:output] || 0)}
+                  data-sort-released={model.release_date || ""}
+                >
                   <:cell>
                     <span class="font-medium">{model.name}</span>
                   </:cell>
@@ -199,4 +212,24 @@ defmodule AutoforgeWeb.ModelsLive do
   defp capability_color(:blue), do: "bg-info/15 text-info"
   defp capability_color(:purple), do: "bg-secondary/15 text-secondary"
   defp capability_color(:green), do: "bg-success/15 text-success"
+
+  attr :col, :string, required: true
+  attr :label, :string, required: true
+
+  defp sort_header(assigns) do
+    ~H"""
+    <button
+      data-sort-col={@col}
+      class="sort-header inline-flex items-center gap-1 cursor-pointer hover:text-base-content transition-colors group"
+    >
+      {@label}
+      <span class="sort-indicator">
+        <.icon
+          name="hero-chevron-up-down"
+          class="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity"
+        />
+      </span>
+    </button>
+    """
+  end
 end

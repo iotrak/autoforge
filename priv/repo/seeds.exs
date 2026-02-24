@@ -45,21 +45,43 @@ for name <- ["Administrators", "Developers", "Testers"] do
   end
 end
 
-# ── Bots ──────────────────────────────────────────────────────────────────────
+# ── Anthropic Provider Key ────────────────────────────────────────────────────
 
 alias Autoforge.Accounts.LlmProviderKey
 alias Autoforge.Ai.{Bot, BotTool, BotUserGroup, Tool, UserGroupTool}
 
-provider_keys =
-  LlmProviderKey
-  |> Ash.Query.sort(provider: :asc)
-  |> Ash.read!(authorize?: false)
-  |> Map.new(&{&1.provider, &1})
+anthropic_key =
+  case LlmProviderKey
+       |> Ash.Query.filter(provider == :anthropic)
+       |> Ash.read_one!(authorize?: false) do
+    nil ->
+      case System.get_env("ANTHROPIC_API_KEY") do
+        nil ->
+          IO.puts("No Anthropic provider key found and ANTHROPIC_API_KEY not set, skipping.")
+          nil
 
-anthropic_key = Map.get(provider_keys, :anthropic)
-cerebras_key = Map.get(provider_keys, :cerebras)
+        api_key ->
+          key =
+            LlmProviderKey
+            |> Ash.Changeset.for_create(
+              :create,
+              %{name: "Anthropic", provider: :anthropic, value: api_key},
+              authorize?: false
+            )
+            |> Ash.create!()
 
-if anthropic_key || cerebras_key do
+          IO.puts("Seeded Anthropic provider key from ANTHROPIC_API_KEY.")
+          key
+      end
+
+    existing ->
+      IO.puts("Anthropic provider key already exists, skipping.")
+      existing
+  end
+
+# ── Bots ──────────────────────────────────────────────────────────────────────
+
+if anthropic_key do
   # Look up tools
   get_url =
     Tool |> Ash.Query.filter(name == "get_url") |> Ash.read_one!(authorize?: false)
@@ -80,13 +102,9 @@ if anthropic_key || cerebras_key do
   testers =
     UserGroup |> Ash.Query.filter(name == "Testers") |> Ash.read_one!(authorize?: false)
 
-  # Anthropic models (deep reasoning, code review, architecture)
   opus_model = "anthropic:claude-opus-4-6"
   sonnet_model = "anthropic:claude-sonnet-4-6"
-
-  # Cerebras models (fast domain knowledge recall)
-  cerebras_coder = "cerebras:qwen-3-coder-480b"
-  cerebras_instruct = "cerebras:qwen-3-235b-a22b-instruct-2507"
+  haiku_model = "anthropic:claude-haiku-4-5-20251001"
 
   bot_definitions = [
     %{
@@ -94,7 +112,6 @@ if anthropic_key || cerebras_key do
       description:
         "Expert in OTP design, supervision trees, and distributed Elixir architecture.",
       model: opus_model,
-      key: anthropic_key,
       temperature: 0.6,
       max_tokens: 4096,
       tools: [get_url, delegate_task],
@@ -116,8 +133,7 @@ if anthropic_key || cerebras_key do
     %{
       name: "Ash Sage",
       description: "Deep knowledge of the Ash Framework DSL, resources, actions, and policies.",
-      model: cerebras_instruct,
-      key: cerebras_key,
+      model: sonnet_model,
       temperature: 0.5,
       max_tokens: 4096,
       tools: [get_url, delegate_task],
@@ -142,8 +158,7 @@ if anthropic_key || cerebras_key do
       name: "Phoenix Guide",
       description:
         "Phoenix 1.8 expert covering LiveView, layouts, components, and the asset pipeline.",
-      model: cerebras_instruct,
-      key: cerebras_key,
+      model: sonnet_model,
       temperature: 0.5,
       max_tokens: 4096,
       tools: [get_url, delegate_task],
@@ -170,7 +185,6 @@ if anthropic_key || cerebras_key do
       description:
         "Writes production-quality Elixir, Ash, and Phoenix code with full documentation.",
       model: sonnet_model,
-      key: anthropic_key,
       temperature: 0.3,
       max_tokens: 8192,
       tools: [get_url, get_time, delegate_task],
@@ -196,7 +210,6 @@ if anthropic_key || cerebras_key do
       description:
         "Reviews Elixir code across correctness, idioms, OTP, performance, and security.",
       model: opus_model,
-      key: anthropic_key,
       temperature: 0.4,
       max_tokens: 4096,
       tools: [get_url, delegate_task],
@@ -227,8 +240,7 @@ if anthropic_key || cerebras_key do
       name: "Test Engineer",
       description:
         "Designs and writes ExUnit tests for Ash resources, LiveView, and property-based testing.",
-      model: sonnet_model,
-      key: anthropic_key,
+      model: haiku_model,
       temperature: 0.3,
       max_tokens: 8192,
       tools: [get_time, delegate_task],
@@ -258,7 +270,7 @@ if anthropic_key || cerebras_key do
     }
   ]
 
-  for bot_def <- bot_definitions, bot_def.key != nil do
+  for bot_def <- bot_definitions do
     bot =
       case Bot |> Ash.Query.filter(name == ^bot_def.name) |> Ash.read_one!(authorize?: false) do
         nil ->
@@ -273,7 +285,7 @@ if anthropic_key || cerebras_key do
                 model: bot_def.model,
                 temperature: bot_def.temperature,
                 max_tokens: bot_def.max_tokens,
-                llm_provider_key_id: bot_def.key.id
+                llm_provider_key_id: anthropic_key.id
               },
               authorize?: false
             )
@@ -350,7 +362,7 @@ if anthropic_key || cerebras_key do
     end
   end
 else
-  IO.puts("No provider keys found, skipping bot seeding.")
+  IO.puts("No Anthropic provider key available, skipping bot seeding.")
 end
 
 # ── Project Templates ────────────────────────────────────────────────────────

@@ -158,5 +158,59 @@ const ProvisionLogHook = {
   },
 };
 
+const DevServerHook = {
+  mounted() {
+    this.term = new Terminal({
+      cursorBlink: false,
+      disableStdin: true,
+      fontSize: 14,
+      fontFamily: "'IBM Plex Mono', monospace",
+      scrollback: 10000,
+      theme: { ...terminalTheme, cursor: "#1c1917" },
+    });
+
+    this.fitAddon = new FitAddon();
+    this.term.loadAddon(this.fitAddon);
+    this.term.loadAddon(new WebLinksAddon());
+
+    this.term.open(this.el);
+    this.fitAddon.fit();
+
+    this.resizeObserver = new ResizeObserver(() => {
+      if (this.el.clientWidth === 0 || this.el.clientHeight === 0) return;
+      this.fitAddon.fit();
+    });
+    this.resizeObserver.observe(this.el);
+
+    // Re-fit when parent panel becomes visible (tab switch)
+    const panel = this.el.parentElement;
+    if (panel) {
+      this.mutationObserver = new MutationObserver(() => {
+        if (!panel.classList.contains("invisible")) {
+          this.fitAddon.fit();
+        }
+      });
+      this.mutationObserver.observe(panel, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    }
+
+    this.handleEvent("dev_server_output", ({ type, data }) => {
+      if (type === "step") {
+        this.term.writeln(`\x1b[33m${data}\x1b[0m`);
+      } else {
+        this.term.write(data);
+      }
+    });
+  },
+
+  destroyed() {
+    if (this.term) this.term.dispose();
+    if (this.resizeObserver) this.resizeObserver.disconnect();
+    if (this.mutationObserver) this.mutationObserver.disconnect();
+  },
+};
+
 export default TerminalHook;
-export { ProvisionLogHook };
+export { ProvisionLogHook, DevServerHook };

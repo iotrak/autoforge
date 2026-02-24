@@ -69,6 +69,18 @@ defmodule Autoforge.Accounts.UserGroup do
       source_attribute_on_join_resource :user_group_id
       destination_attribute_on_join_resource :tool_id
     end
+
+    many_to_many :projects, Autoforge.Projects.Project do
+      through Autoforge.Projects.ProjectUserGroup
+      source_attribute_on_join_resource :user_group_id
+      destination_attribute_on_join_resource :project_id
+    end
+
+    many_to_many :project_templates, Autoforge.Projects.ProjectTemplate do
+      through Autoforge.Projects.ProjectTemplateUserGroup
+      source_attribute_on_join_resource :user_group_id
+      destination_attribute_on_join_resource :project_template_id
+    end
   end
 
   identities do

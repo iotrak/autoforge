@@ -21,11 +21,13 @@ defmodule Autoforge.Projects.Sandbox do
     network_name = "autoforge-#{project.id}"
     db_alias = "db-#{project.id}"
     base_image = project.project_template.base_image
+    db_image = project.project_template.db_image
 
     with {:ok, project} <- transition(project, :provision),
+         {:ok, host_port} <- allocate_port(),
          :ok <-
-           log_and_run(project, "Pulling image postgres:18-alpine...", fn ->
-             Docker.pull_image("postgres:18-alpine")
+           log_and_run(project, "Pulling image #{db_image}...", fn ->
+             Docker.pull_image(db_image)
            end),
          :ok <-
            log_and_run(project, "Pulling image #{base_image}...", fn ->
@@ -48,7 +50,7 @@ defmodule Autoforge.Projects.Sandbox do
          :ok <- create_test_database(db_container_id, project),
          {:ok, app_container_id} <-
            log_and_run(project, "Creating application container...", fn ->
-             create_app_container(project, network_id)
+             create_app_container(project, network_id, host_port)
            end),
          :ok <- Docker.start_container(app_container_id),
          :ok <-
@@ -63,7 +65,8 @@ defmodule Autoforge.Projects.Sandbox do
              %{
                container_id: app_container_id,
                db_container_id: db_container_id,
-               network_id: network_id
+               network_id: network_id,
+               host_port: host_port
              },
              action: :mark_running,
              authorize?: false
@@ -154,6 +157,18 @@ defmodule Autoforge.Projects.Sandbox do
 
   # Private helpers
 
+  defp allocate_port do
+    case :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true]) do
+      {:ok, socket} ->
+        {:ok, port} = :inet.port(socket)
+        :gen_tcp.close(socket)
+        {:ok, port}
+
+      {:error, reason} ->
+        {:error, {:port_allocation_failed, reason}}
+    end
+  end
+
   defp broadcast_provision_log(project, message) do
     Phoenix.PubSub.broadcast(
       Autoforge.PubSub,
@@ -173,7 +188,7 @@ defmodule Autoforge.Projects.Sandbox do
 
   defp create_db_container(project, network_id, db_alias) do
     config = %{
-      "Image" => "postgres:18-alpine",
+      "Image" => project.project_template.db_image,
       "Env" => [
         "POSTGRES_DB=#{project.db_name}",
         "POSTGRES_USER=postgres",
@@ -194,7 +209,7 @@ defmodule Autoforge.Projects.Sandbox do
     Docker.create_container(config, name: "autoforge-db-#{project.id}")
   end
 
-  defp create_app_container(project, network_id) do
+  defp create_app_container(project, network_id, host_port) do
     template = project.project_template
 
     config = %{
@@ -202,6 +217,7 @@ defmodule Autoforge.Projects.Sandbox do
       "Cmd" => ["sleep", "infinity"],
       "WorkingDir" => "/app",
       "Env" => [
+        "PORT=4000",
         "DATABASE_URL=postgresql://postgres:#{project.db_password}@db-#{project.id}:5432/#{project.db_name}",
         "DATABASE_TEST_URL=postgresql://postgres:#{project.db_password}@db-#{project.id}:5432/#{project.db_name}_test",
         "DB_HOST=db-#{project.id}",
@@ -211,8 +227,10 @@ defmodule Autoforge.Projects.Sandbox do
         "DB_USER=postgres",
         "DB_PASSWORD=#{project.db_password}"
       ],
+      "ExposedPorts" => %{"4000/tcp" => %{}},
       "HostConfig" => %{
-        "NetworkMode" => network_id
+        "NetworkMode" => network_id,
+        "PortBindings" => %{"4000/tcp" => [%{"HostPort" => to_string(host_port)}]}
       }
     }
 

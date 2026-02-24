@@ -21,6 +21,8 @@ defmodule Autoforge.Application do
       # Start a worker by calling: Autoforge.Worker.start_link(arg)
       # {Autoforge.Worker, arg},
       {Task.Supervisor, name: Autoforge.TaskSupervisor},
+      {Registry, keys: :unique, name: Autoforge.DevServerRegistry},
+      {DynamicSupervisor, name: Autoforge.Projects.DevServerSupervisor, strategy: :one_for_one},
       # Start to serve requests, typically the last entry
       AutoforgeWeb.Endpoint,
       {AshAuthentication.Supervisor, [otp_app: :autoforge]}

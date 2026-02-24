@@ -14,11 +14,11 @@ defmodule Autoforge.Projects.ProjectTemplate do
     defaults [:read, :destroy]
 
     create :create do
-      accept [:name, :description, :base_image, :bootstrap_script]
+      accept [:name, :description, :base_image, :db_image, :bootstrap_script, :dev_server_script]
     end
 
     update :update do
-      accept [:name, :description, :base_image, :bootstrap_script]
+      accept [:name, :description, :base_image, :db_image, :bootstrap_script, :dev_server_script]
       require_atomic? false
     end
   end
@@ -53,7 +53,19 @@ defmodule Autoforge.Projects.ProjectTemplate do
       constraints max_length: 255
     end
 
+    attribute :db_image, :string do
+      allow_nil? false
+      public? true
+      default "postgres:18-alpine"
+      constraints max_length: 255
+    end
+
     attribute :bootstrap_script, :string do
+      allow_nil? true
+      public? true
+    end
+
+    attribute :dev_server_script, :string do
       allow_nil? true
       public? true
     end
@@ -65,6 +77,12 @@ defmodule Autoforge.Projects.ProjectTemplate do
   relationships do
     has_many :files, Autoforge.Projects.ProjectTemplateFile do
       destination_attribute :project_template_id
+    end
+
+    many_to_many :user_groups, Autoforge.Accounts.UserGroup do
+      through Autoforge.Projects.ProjectTemplateUserGroup
+      source_attribute_on_join_resource :project_template_id
+      destination_attribute_on_join_resource :user_group_id
     end
   end
 

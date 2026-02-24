@@ -121,6 +121,14 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
                 field={@form[:base_image]}
                 label="Base Image"
                 placeholder="node:20-alpine"
+                help_text="Docker image used for the application container (e.g. elixir:1.18-alpine, node:20-alpine)"
+              />
+
+              <.input
+                field={@form[:db_image]}
+                label="Database Image"
+                placeholder="postgres:18-alpine"
+                help_text="Docker image used for the database container (e.g. postgres:18-alpine, mysql:8)"
               />
 
               <div>
@@ -143,6 +151,20 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
                     {"{{ #{var} }}"}
                   </code>
                 </div>
+              </div>
+
+              <div>
+                <.textarea
+                  field={@form[:dev_server_script]}
+                  label="Dev Server Script"
+                  placeholder="mix ecto.setup\nmix phx.server"
+                  rows={5}
+                  class="font-mono text-sm bg-base-300 border-base-300 rounded-lg px-3 py-2 w-full"
+                />
+                <p class="mt-1.5 text-xs text-base-content/50">
+                  Multi-line script to start the dev server. Each line runs in sequence.
+                  The same template variables are available. Leave blank to disable the server button.
+                </p>
               </div>
 
               <div class="flex items-center gap-3 pt-2">

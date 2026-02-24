@@ -352,3 +352,78 @@ if anthropic_key || cerebras_key do
 else
   IO.puts("No provider keys found, skipping bot seeding.")
 end
+
+# ── Project Templates ────────────────────────────────────────────────────────
+
+alias Autoforge.Projects.ProjectTemplate
+
+ash_phoenix_template =
+  case ProjectTemplate
+       |> Ash.Query.filter(name == "Ash Phoenix Project")
+       |> Ash.read_one!(authorize?: false) do
+    nil ->
+      template =
+        ProjectTemplate
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            name: "Ash Phoenix Project",
+            description: "A starter template for Ash Phoenix projects",
+            base_image: "hexpm/elixir:1.19.5-erlang-28.3.2-ubuntu-noble-20260210.1",
+            db_image: "postgres:18-alpine",
+            bootstrap_script: ~S"""
+            {% assign project_path = project_name | downcase | replace: ' ', '_' %}
+
+            apt-get update && \
+              apt-get install -y --no-install-recommends build-essential cmake curl git inotify-tools watchman \
+              && curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
+              && apt-get install -y nodejs
+
+            curl -fsSL https://claude.ai/install.sh | bash
+
+            claude mcp add --transport http tidewave http://localhost:4000/tidewave/mcp
+
+            git config --global init.defaultBranch main
+
+            mix archive.install hex igniter_new --force
+            mix archive.install hex phx_new 1.8.4 --force
+
+            mix igniter.new {{ project_path }} --with phx.new --install ash,ash_phoenix \
+              --install ash_graphql,ash_postgres \
+              --install ash_authentication,ash_authentication_phoenix \
+              --install ash_oban,oban_web --install ash_state_machine,live_debugger \
+              --install tidewave,ash_paper_trail --install cloak,ash_cloak \
+              --install req_llm \
+              --auth-strategy magic_link --setup --yes
+
+            mv {{ project_path }}/* .
+            mv {{ project_path }}/.formatter.exs .
+            mv {{ project_path }}/.igniter.exs .
+            mv {{ project_path }}/.gitignore .
+            mv {{ project_path }}/.git .
+            rm -rf {{ project_path }}
+
+            sed -i 's/username: "postgres"/username: "{{ db_user }}"/' config/dev.exs
+            sed -i 's/password: "postgres"/password: "{{ db_password }}"/' config/dev.exs
+            sed -i 's/hostname: "localhost"/hostname: "{{ db_host }}"/' config/dev.exs
+            sed -i 's/database: "{{ project_name }}_dev"/database: "{{ db_name }}"/' config/dev.exs
+            sed -i 's/username: "postgres"/username: "{{ db_user }}"/' config/test.exs
+            sed -i 's/password: "postgres"/password: "{{ db_password }}"/' config/test.exs
+            sed -i 's/hostname: "localhost"/hostname: "{{ db_host }}"/' config/test.exs
+            sed -i 's/database: "{{ db_test_name }}_test#{System.get_env("MIX_TEST_PARTITION")}"/database: "{{ db_test_name }}#{System.get_env("MIX_TEST_PARTITION")}"/' config/test.exs
+            """,
+            dev_server_script: "mix ecto.setup\nmix phx.server"
+          },
+          authorize?: false
+        )
+        |> Ash.create!()
+
+      IO.puts("Seeded project template: Ash Phoenix Project")
+      template
+
+    existing ->
+      IO.puts("Project template Ash Phoenix Project already exists, skipping.")
+      existing
+  end
+
+_ = ash_phoenix_template

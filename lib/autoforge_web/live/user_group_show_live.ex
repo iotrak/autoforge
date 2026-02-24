@@ -3,6 +3,7 @@ defmodule AutoforgeWeb.UserGroupShowLive do
 
   alias Autoforge.Accounts.{User, UserGroup, UserGroupMembership}
   alias Autoforge.Ai.{Bot, BotUserGroup, Tool, UserGroupTool}
+  alias Autoforge.Projects.{Project, ProjectTemplate, ProjectUserGroup, ProjectTemplateUserGroup}
 
   require Ash.Query
 
@@ -23,6 +24,8 @@ defmodule AutoforgeWeb.UserGroupShowLive do
         available_users = load_available_users(group, current_user)
         available_bots = load_available_bots(group, current_user)
         available_tools = load_available_tools(group, current_user)
+        available_projects = load_available_projects(group, current_user)
+        available_project_templates = load_available_project_templates(group, current_user)
 
         {:ok,
          assign(socket,
@@ -30,7 +33,9 @@ defmodule AutoforgeWeb.UserGroupShowLive do
            group: group,
            available_users: available_users,
            available_bots: available_bots,
-           available_tools: available_tools
+           available_tools: available_tools,
+           available_projects: available_projects,
+           available_project_templates: available_project_templates
          )}
 
       {:error, _} ->
@@ -150,6 +155,72 @@ defmodule AutoforgeWeb.UserGroupShowLive do
     {:noreply, reload_group(socket)}
   end
 
+  def handle_event("add_project", %{"project_id" => project_id}, socket) do
+    current_user = socket.assigns.current_user
+    group = socket.assigns.group
+
+    ProjectUserGroup
+    |> AshPhoenix.Form.for_create(:create, actor: current_user)
+    |> AshPhoenix.Form.submit(params: %{"user_group_id" => group.id, "project_id" => project_id})
+    |> case do
+      {:ok, _} ->
+        {:noreply, reload_group(socket)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to add project.")}
+    end
+  end
+
+  def handle_event("remove_project", %{"project_id" => project_id}, socket) do
+    current_user = socket.assigns.current_user
+    group = socket.assigns.group
+
+    project_group =
+      ProjectUserGroup
+      |> Ash.Query.filter(user_group_id == ^group.id and project_id == ^project_id)
+      |> Ash.read_one!(actor: current_user)
+
+    if project_group do
+      Ash.destroy!(project_group, actor: current_user)
+    end
+
+    {:noreply, reload_group(socket)}
+  end
+
+  def handle_event("add_project_template", %{"project_template_id" => template_id}, socket) do
+    current_user = socket.assigns.current_user
+    group = socket.assigns.group
+
+    ProjectTemplateUserGroup
+    |> AshPhoenix.Form.for_create(:create, actor: current_user)
+    |> AshPhoenix.Form.submit(
+      params: %{"user_group_id" => group.id, "project_template_id" => template_id}
+    )
+    |> case do
+      {:ok, _} ->
+        {:noreply, reload_group(socket)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to add project template.")}
+    end
+  end
+
+  def handle_event("remove_project_template", %{"project_template_id" => template_id}, socket) do
+    current_user = socket.assigns.current_user
+    group = socket.assigns.group
+
+    template_group =
+      ProjectTemplateUserGroup
+      |> Ash.Query.filter(user_group_id == ^group.id and project_template_id == ^template_id)
+      |> Ash.read_one!(actor: current_user)
+
+    if template_group do
+      Ash.destroy!(template_group, actor: current_user)
+    end
+
+    {:noreply, reload_group(socket)}
+  end
+
   defp reload_group(socket) do
     current_user = socket.assigns.current_user
     group_id = socket.assigns.group.id
@@ -159,12 +230,16 @@ defmodule AutoforgeWeb.UserGroupShowLive do
         available_users = load_available_users(group, current_user)
         available_bots = load_available_bots(group, current_user)
         available_tools = load_available_tools(group, current_user)
+        available_projects = load_available_projects(group, current_user)
+        available_project_templates = load_available_project_templates(group, current_user)
 
         assign(socket,
           group: group,
           available_users: available_users,
           available_bots: available_bots,
-          available_tools: available_tools
+          available_tools: available_tools,
+          available_projects: available_projects,
+          available_project_templates: available_project_templates
         )
 
       _ ->
@@ -177,7 +252,7 @@ defmodule AutoforgeWeb.UserGroupShowLive do
   defp load_group(id, actor) do
     UserGroup
     |> Ash.Query.filter(id == ^id)
-    |> Ash.Query.load([:members, :bots, :tools])
+    |> Ash.Query.load([:members, :bots, :tools, :projects, :project_templates])
     |> Ash.read_one(actor: actor)
   end
 
@@ -206,6 +281,24 @@ defmodule AutoforgeWeb.UserGroupShowLive do
     |> Ash.Query.sort(name: :asc)
     |> Ash.read!(actor: actor)
     |> Enum.reject(&(&1.id in assigned_tool_ids))
+  end
+
+  defp load_available_projects(group, actor) do
+    assigned_project_ids = Enum.map(group.projects, & &1.id)
+
+    Project
+    |> Ash.Query.sort(name: :asc)
+    |> Ash.read!(actor: actor)
+    |> Enum.reject(&(&1.id in assigned_project_ids))
+  end
+
+  defp load_available_project_templates(group, actor) do
+    assigned_template_ids = Enum.map(group.project_templates, & &1.id)
+
+    ProjectTemplate
+    |> Ash.Query.sort(name: :asc)
+    |> Ash.read!(actor: actor)
+    |> Enum.reject(&(&1.id in assigned_template_ids))
   end
 
   @impl true
@@ -387,7 +480,7 @@ defmodule AutoforgeWeb.UserGroupShowLive do
           </div>
         </div>
 
-        <div class="card bg-base-200 shadow-sm">
+        <div class="card bg-base-200 shadow-sm mb-6">
           <div class="card-body">
             <div class="flex items-center gap-2 mb-4">
               <h2 class="text-lg font-semibold">Tools</h2>
@@ -440,6 +533,134 @@ defmodule AutoforgeWeb.UserGroupShowLive do
                         phx-click="remove_tool"
                         phx-value-tool_id={tool.id}
                         data-confirm="Remove this tool from the group?"
+                      >
+                        <.icon name="hero-x-mark" class="w-4 h-4" />
+                      </.button>
+                    </:cell>
+                  </.table_row>
+                </.table_body>
+              </.table>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm mb-6">
+          <div class="card-body">
+            <div class="flex items-center gap-2 mb-4">
+              <h2 class="text-lg font-semibold">Projects</h2>
+              <span class="badge badge-sm">{length(@group.projects)}</span>
+            </div>
+
+            <%= if @available_projects != [] do %>
+              <.form
+                for={%{}}
+                phx-submit="add_project"
+                class="flex items-end gap-3 mb-4"
+              >
+                <div class="flex-1">
+                  <label class="text-sm font-medium mb-1 block">Add a project</label>
+                  <select name="project_id" class="select select-bordered w-full">
+                    <option :for={project <- @available_projects} value={project.id}>
+                      {project.name}
+                    </option>
+                  </select>
+                </div>
+                <.button type="submit" variant="solid" color="primary" size="sm">
+                  <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Add
+                </.button>
+              </.form>
+            <% end %>
+
+            <%= if @group.projects == [] do %>
+              <p class="text-sm text-base-content/50">No projects assigned yet.</p>
+            <% else %>
+              <.table>
+                <.table_head>
+                  <:col class="w-full">Name</:col>
+                  <:col></:col>
+                </.table_head>
+                <.table_body>
+                  <.table_row :for={project <- @group.projects}>
+                    <:cell class="w-full">
+                      <.link
+                        navigate={~p"/projects/#{project.id}"}
+                        class="font-medium hover:underline"
+                      >
+                        {project.name}
+                      </.link>
+                    </:cell>
+                    <:cell>
+                      <.button
+                        variant="ghost"
+                        size="sm"
+                        color="danger"
+                        phx-click="remove_project"
+                        phx-value-project_id={project.id}
+                        data-confirm="Remove this project from the group?"
+                      >
+                        <.icon name="hero-x-mark" class="w-4 h-4" />
+                      </.button>
+                    </:cell>
+                  </.table_row>
+                </.table_body>
+              </.table>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body">
+            <div class="flex items-center gap-2 mb-4">
+              <h2 class="text-lg font-semibold">Project Templates</h2>
+              <span class="badge badge-sm">{length(@group.project_templates)}</span>
+            </div>
+
+            <%= if @available_project_templates != [] do %>
+              <.form
+                for={%{}}
+                phx-submit="add_project_template"
+                class="flex items-end gap-3 mb-4"
+              >
+                <div class="flex-1">
+                  <label class="text-sm font-medium mb-1 block">Add a project template</label>
+                  <select name="project_template_id" class="select select-bordered w-full">
+                    <option :for={template <- @available_project_templates} value={template.id}>
+                      {template.name}
+                    </option>
+                  </select>
+                </div>
+                <.button type="submit" variant="solid" color="primary" size="sm">
+                  <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Add
+                </.button>
+              </.form>
+            <% end %>
+
+            <%= if @group.project_templates == [] do %>
+              <p class="text-sm text-base-content/50">No project templates assigned yet.</p>
+            <% else %>
+              <.table>
+                <.table_head>
+                  <:col class="w-full">Name</:col>
+                  <:col></:col>
+                </.table_head>
+                <.table_body>
+                  <.table_row :for={template <- @group.project_templates}>
+                    <:cell class="w-full">
+                      <.link
+                        navigate={~p"/project-templates/#{template.id}/edit"}
+                        class="font-medium hover:underline"
+                      >
+                        {template.name}
+                      </.link>
+                    </:cell>
+                    <:cell>
+                      <.button
+                        variant="ghost"
+                        size="sm"
+                        color="danger"
+                        phx-click="remove_project_template"
+                        phx-value-project_template_id={template.id}
+                        data-confirm="Remove this template from the group?"
                       >
                         <.icon name="hero-x-mark" class="w-4 h-4" />
                       </.button>

@@ -1,7 +1,7 @@
 defmodule AutoforgeWeb.ProjectLive do
   use AutoforgeWeb, :live_view
 
-  alias Autoforge.Projects.{Project, Sandbox}
+  alias Autoforge.Projects.{DevServer, Project, Sandbox}
 
   require Ash.Query
 
@@ -21,9 +21,12 @@ defmodule AutoforgeWeb.ProjectLive do
       if connected?(socket) do
         Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:updated:#{project.id}")
         Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:provision_log:#{project.id}")
+        Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:dev_server:#{project.id}")
       end
 
       token = Phoenix.Token.sign(AutoforgeWeb.Endpoint, "user_socket", user.id)
+
+      dev_server_running = DevServer.running?(project.id)
 
       terminals =
         if project.state == :running,
@@ -38,7 +41,9 @@ defmodule AutoforgeWeb.ProjectLive do
          provision_log_started: false,
          terminals: terminals,
          active_terminal: if(terminals != [], do: "term-1"),
-         terminal_counter: length(terminals)
+         terminal_counter: length(terminals),
+         dev_server_running: dev_server_running,
+         dev_server_tab_open: dev_server_running
        )}
     else
       {:ok,
@@ -87,6 +92,14 @@ defmodule AutoforgeWeb.ProjectLive do
      socket
      |> assign(provision_log_started: true)
      |> push_event("provision_log", %{type: "step", data: message})}
+  end
+
+  def handle_info({:dev_server_output, chunk}, socket) do
+    {:noreply, push_event(socket, "dev_server_output", %{type: "output", data: chunk})}
+  end
+
+  def handle_info({:dev_server_stopped, _reason}, socket) do
+    {:noreply, assign(socket, dev_server_running: false)}
   end
 
   @impl true
@@ -156,6 +169,39 @@ defmodule AutoforgeWeb.ProjectLive do
      |> push_navigate(to: ~p"/projects")}
   end
 
+  def handle_event("start_dev_server", _params, socket) do
+    project = socket.assigns.project
+
+    case DynamicSupervisor.start_child(
+           Autoforge.Projects.DevServerSupervisor,
+           {DevServer, project}
+         ) do
+      {:ok, _pid} ->
+        {:noreply,
+         assign(socket,
+           dev_server_running: true,
+           dev_server_tab_open: true,
+           active_terminal: "dev-server"
+         )}
+
+      {:error, {:already_started, _pid}} ->
+        {:noreply,
+         assign(socket,
+           dev_server_running: true,
+           dev_server_tab_open: true,
+           active_terminal: "dev-server"
+         )}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to start dev server: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("stop_dev_server", _params, socket) do
+    DevServer.stop(socket.assigns.project.id)
+    {:noreply, assign(socket, dev_server_running: false)}
+  end
+
   defp state_badge_class(state) do
     case state do
       :creating -> "badge-info"
@@ -172,6 +218,12 @@ defmodule AutoforgeWeb.ProjectLive do
   defp state_animating?(state) do
     state in [:creating, :provisioning, :destroying]
   end
+
+  defp has_dev_server_script?(%{project_template: %{dev_server_script: script}})
+       when is_binary(script) and script != "",
+       do: true
+
+  defp has_dev_server_script?(_), do: false
 
   @impl true
   def render(assigns) do
@@ -213,6 +265,34 @@ defmodule AutoforgeWeb.ProjectLive do
           </div>
 
           <div class="flex items-center gap-1.5 flex-shrink-0">
+            <.button
+              :if={
+                @project.state == :running && !@dev_server_running && has_dev_server_script?(@project)
+              }
+              phx-click="start_dev_server"
+              variant="outline"
+              size="xs"
+              color="success"
+            >
+              <.icon name="hero-globe-alt" class="w-3.5 h-3.5 mr-1" /> Start Server
+            </.button>
+            <.button
+              :if={@project.state == :running && @dev_server_running}
+              phx-click="stop_dev_server"
+              variant="outline"
+              size="xs"
+              color="warning"
+            >
+              <.icon name="hero-globe-alt" class="w-3.5 h-3.5 mr-1" /> Stop Server
+            </.button>
+            <.link
+              :if={@dev_server_running && @project.host_port}
+              href={"http://localhost:#{@project.host_port}"}
+              target="_blank"
+              class="btn btn-xs btn-outline btn-primary"
+            >
+              <.icon name="hero-arrow-top-right-on-square" class="w-3.5 h-3.5 mr-1" /> Open
+            </.link>
             <.button
               :if={@project.state == :stopped}
               phx-click="start"
@@ -283,6 +363,27 @@ defmodule AutoforgeWeb.ProjectLive do
           <div :if={@project.state == :running} class="h-full flex flex-col">
             <%!-- Tab Bar --%>
             <div class="flex items-center bg-base-100 flex-shrink-0 overflow-x-auto">
+              <%!-- Server Tab --%>
+              <button
+                :if={@dev_server_tab_open}
+                phx-click="switch_terminal"
+                phx-value-id="dev-server"
+                class={[
+                  "group flex items-center gap-1.5 px-4 py-2 text-sm border-r border-base-300 transition-colors cursor-pointer",
+                  if("dev-server" == @active_terminal,
+                    do: "bg-[#1c1917] text-stone-200",
+                    else: "text-base-content/50 hover:text-base-content hover:bg-base-200"
+                  )
+                ]}
+              >
+                <.icon name="hero-globe-alt" class="w-3.5 h-3.5" />
+                <span>Server</span>
+                <span
+                  :if={@dev_server_running}
+                  class="w-2 h-2 rounded-full bg-green-400 ml-1"
+                />
+              </button>
+              <%!-- Terminal Tabs --%>
               <button
                 :for={tab <- @terminals}
                 phx-click="switch_terminal"
@@ -321,8 +422,25 @@ defmodule AutoforgeWeb.ProjectLive do
                 <.icon name="hero-plus" class="w-4 h-4" />
               </button>
             </div>
-            <%!-- Terminal Panels --%>
+            <%!-- Tab Panels --%>
             <div class="flex-1 min-h-0 relative">
+              <%!-- Dev Server Panel --%>
+              <div
+                :if={@dev_server_tab_open}
+                id="terminal-panel-dev-server"
+                class={[
+                  "absolute inset-0",
+                  if("dev-server" != @active_terminal, do: "invisible")
+                ]}
+              >
+                <div
+                  id="dev-server"
+                  phx-hook="DevServer"
+                  phx-update="ignore"
+                  class="h-full"
+                />
+              </div>
+              <%!-- Terminal Panels --%>
               <div
                 :for={tab <- @terminals}
                 id={"terminal-panel-#{tab.id}"}

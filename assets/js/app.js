@@ -25,7 +25,7 @@ import { LiveSocket } from "phoenix_live_view";
 import { hooks as colocatedHooks } from "phoenix-colocated/autoforge";
 import topbar from "../vendor/topbar";
 import { Hooks as FluxonHooks, DOM as FluxonDOM } from "fluxon";
-import TerminalHook, { ProvisionLogHook } from "./hooks/terminal";
+import TerminalHook, { ProvisionLogHook, DevServerHook } from "./hooks/terminal";
 import SortableTableHook from "./hooks/sortable_table";
 
 const ChatScroll = {
@@ -267,7 +267,7 @@ const csrfToken = document
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
-  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput, Terminal: TerminalHook, ProvisionLog: ProvisionLogHook, SortableTable: SortableTableHook },
+  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput, Terminal: TerminalHook, ProvisionLog: ProvisionLogHook, DevServer: DevServerHook, SortableTable: SortableTableHook },
   dom: {
     onBeforeElUpdated(from, to) {
       FluxonDOM.onBeforeElUpdated(from, to);

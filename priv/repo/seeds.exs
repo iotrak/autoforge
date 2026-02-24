@@ -372,6 +372,9 @@ ash_phoenix_template =
             base_image: "hexpm/elixir:1.19.5-erlang-28.3.2-ubuntu-noble-20260210.1",
             db_image: "postgres:18-alpine",
             bootstrap_script: ~S"""
+            export DEBIAN_FRONTEND=noninteractive
+            export TZ=Etc/UTC
+
             {% assign project_path = project_name | downcase | replace: ' ', '_' %}
 
             apt-get update && \

@@ -174,4 +174,8 @@
 /* xterm.js terminal styles */
 @import "../vendor/xterm.css";
 
+.xterm {
+  padding: 0.25rem;
+}
+
 /* This file is for your main application CSS */

@@ -182,10 +182,6 @@ defmodule AutoforgeWeb.ConversationLive do
     end
   end
 
-  defp multi_participant?(conversation) do
-    length(conversation.bots) > 1 || length(conversation.participants) > 1
-  end
-
   defp conversation_context_limit(conversation) do
     conversation.bots
     |> Enum.map(fn bot ->
@@ -280,7 +276,7 @@ defmodule AutoforgeWeb.ConversationLive do
                   "prose prose-sm max-w-none dark:prose-invert [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
                   if(message.role == :bot, do: "prose-bot")
                 ]}>
-                  {Markdown.to_html(message.body)}
+                  {Markdown.to_html(message.body, mentions: Enum.map(@conversation.bots, & &1.name))}
                 </div>
                 <.tool_invocations_panel
                   :if={message.role == :bot && message.tool_invocations != []}
@@ -320,23 +316,27 @@ defmodule AutoforgeWeb.ConversationLive do
         </div>
 
         <div class="border-t border-base-300 bg-base-100 px-5 py-3">
-          <p
-            :if={multi_participant?(@conversation)}
-            class="text-xs text-base-content/40 mb-1"
-          >
-            Mention a bot: {Enum.map_join(@conversation.bots, ", ", &"@#{&1.name}")}
-          </p>
           <form phx-submit="send" class="relative flex items-end gap-2">
             <div id="mention-dropdown-container" phx-update="ignore" class="contents"></div>
-            <textarea
-              id="chat-input"
-              name="body"
-              placeholder="Type a message..."
-              rows="1"
-              phx-hook="ChatInput"
-              data-bots={Jason.encode!(Enum.map(@conversation.bots, &%{id: &1.id, name: &1.name}))}
-              class="flex-1 min-h-9 max-h-32 resize-none bg-input text-foreground border border-input rounded-base shadow-base px-3 py-1.5 text-sm outline-hidden placeholder:text-foreground-softest focus-visible:border-focus focus-visible:ring-3 focus-visible:ring-focus transition-[box-shadow] duration-100"
-            >{@message_body}</textarea>
+            <div class="relative flex-1">
+              <div
+                id="chat-input-mirror"
+                phx-update="ignore"
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-0 min-h-9 max-h-32 overflow-hidden whitespace-pre-wrap break-words px-3 py-1.5 text-sm font-sans leading-normal text-foreground border border-transparent"
+              >
+              </div>
+              <textarea
+                id="chat-input"
+                name="body"
+                placeholder="Type a message..."
+                rows="1"
+                phx-hook="ChatInput"
+                data-bots={Jason.encode!(Enum.map(@conversation.bots, &%{id: &1.id, name: &1.name}))}
+                style="color: transparent;"
+                class="w-full min-h-9 max-h-32 resize-none bg-input text-foreground border border-input rounded-base shadow-base px-3 py-1.5 text-sm font-sans leading-normal outline-hidden placeholder:text-foreground-softest focus-visible:border-focus focus-visible:ring-3 focus-visible:ring-focus transition-[box-shadow] duration-100"
+              >{@message_body}</textarea>
+            </div>
             <.button type="submit" variant="solid" color="primary" class="shrink-0 mb-px">
               <.icon name="hero-paper-airplane" class="w-5 h-5" />
             </.button>

@@ -52,6 +52,7 @@ const ChatInput = {
     this.filteredBots = [];
     this.selectedIndex = 0;
     this.dropdown = null;
+    this.mirror = document.getElementById("chat-input-mirror");
 
     this.resize = () => {
       this.el.style.height = "auto";
@@ -63,6 +64,11 @@ const ChatInput = {
     this.el.addEventListener("input", (e) => {
       this.resize();
       this.handleMentionInput();
+      this.updateMirror();
+    });
+
+    this.el.addEventListener("scroll", () => {
+      if (this.mirror) this.mirror.scrollTop = this.el.scrollTop;
     });
 
     this.el.addEventListener("keydown", (e) => {
@@ -99,6 +105,7 @@ const ChatInput = {
           );
           this.el.value = "";
           this.resize();
+          this.updateMirror();
         }
       }
     });
@@ -115,6 +122,7 @@ const ChatInput = {
       this.resize();
       this.el.focus();
       this.hideMentionDropdown();
+      this.updateMirror();
     });
   },
 
@@ -211,6 +219,7 @@ const ChatInput = {
     this.el.setSelectionRange(newCursor, newCursor);
     this.hideMentionDropdown();
     this.el.focus();
+    this.updateMirror();
   },
 
   hideMentionDropdown() {
@@ -221,6 +230,32 @@ const ChatInput = {
     if (this.dropdown) {
       this.dropdown.classList.add("hidden");
     }
+  },
+
+  updateMirror() {
+    if (!this.mirror) return;
+
+    let text = this.el.value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    if (this.bots.length > 0) {
+      const sortedNames = [...this.bots]
+        .sort((a, b) => b.name.length - a.name.length)
+        .map((b) => b.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+      const pattern = new RegExp(
+        "@(" + sortedNames.join("|") + ")\\b",
+        "gi",
+      );
+      text = text.replace(
+        pattern,
+        '<span class="mention-badge">@$1</span>',
+      );
+    }
+
+    this.mirror.innerHTML = text;
   },
 };
 

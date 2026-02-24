@@ -3,6 +3,27 @@ import { FitAddon } from "../../vendor/xterm-addon-fit";
 import { WebLinksAddon } from "../../vendor/xterm-addon-web-links";
 import { Socket } from "phoenix";
 
+// Track active interactive terminals to guard against accidental tab close
+let activeTerminalCount = 0;
+
+function onBeforeUnload(e) {
+  e.preventDefault();
+}
+
+function registerActiveTerminal() {
+  activeTerminalCount++;
+  if (activeTerminalCount === 1) {
+    window.addEventListener("beforeunload", onBeforeUnload);
+  }
+}
+
+function unregisterActiveTerminal() {
+  activeTerminalCount = Math.max(0, activeTerminalCount - 1);
+  if (activeTerminalCount === 0) {
+    window.removeEventListener("beforeunload", onBeforeUnload);
+  }
+}
+
 const terminalTheme = {
   background: "#1c1917",
   foreground: "#e7e5e4",
@@ -99,9 +120,12 @@ const TerminalHook = {
         attributeFilter: ["class"],
       });
     }
+
+    registerActiveTerminal();
   },
 
   destroyed() {
+    unregisterActiveTerminal();
     if (this.channel) {
       this.channel.leave();
     }

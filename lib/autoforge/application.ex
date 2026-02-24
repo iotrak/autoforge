@@ -20,6 +20,7 @@ defmodule Autoforge.Application do
       {Phoenix.PubSub, name: Autoforge.PubSub},
       # Start a worker by calling: Autoforge.Worker.start_link(arg)
       # {Autoforge.Worker, arg},
+      {Task.Supervisor, name: Autoforge.TaskSupervisor},
       # Start to serve requests, typically the last entry
       AutoforgeWeb.Endpoint,
       {AshAuthentication.Supervisor, [otp_app: :autoforge]}

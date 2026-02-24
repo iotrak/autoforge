@@ -171,4 +171,7 @@
   padding-right: 0;
 }
 
+/* xterm.js terminal styles */
+@import "../vendor/xterm.css";
+
 /* This file is for your main application CSS */

@@ -14,9 +14,14 @@ config :ash_oban, pro?: false
 config :autoforge, Oban,
   engine: Oban.Engines.Basic,
   notifier: Oban.Notifiers.Postgres,
-  queues: [default: 10, ai: 5],
+  queues: [default: 10, ai: 5, sandbox: 3],
   repo: Autoforge.Repo,
-  plugins: [{Oban.Plugins.Cron, []}]
+  plugins: [
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"*/5 * * * *", Autoforge.Projects.Workers.CleanupWorker}
+     ]}
+  ]
 
 config :ash,
   allow_forbidden_field_for_relationships_by_default?: true,
@@ -65,7 +70,7 @@ config :spark,
 config :autoforge,
   ecto_repos: [Autoforge.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Autoforge.Accounts, Autoforge.Ai, Autoforge.Chat],
+  ash_domains: [Autoforge.Accounts, Autoforge.Ai, Autoforge.Chat, Autoforge.Projects],
   ash_authentication: [return_error_on_invalid_magic_link_token?: true]
 
 # Configure the endpoint
@@ -87,6 +92,8 @@ config :autoforge, AutoforgeWeb.Endpoint,
 # For production it's recommended to configure a different adapter
 # at the `config/runtime.exs`.
 config :autoforge, Autoforge.Mailer, adapter: Swoosh.Adapters.Local
+
+config :autoforge, Autoforge.Projects.Docker, socket_path: "/var/run/docker.sock"
 
 # Configure esbuild (the version is required)
 config :esbuild,

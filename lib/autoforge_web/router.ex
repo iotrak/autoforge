@@ -50,8 +50,15 @@ defmodule AutoforgeWeb.Router do
       live "/user-groups/new", UserGroupFormLive, :new
       live "/user-groups/:id/edit", UserGroupFormLive, :edit
       live "/user-groups/:id", UserGroupShowLive
+      live "/project-templates", ProjectTemplatesLive
+      live "/project-templates/new", ProjectTemplateFormLive, :new
+      live "/project-templates/:id/edit", ProjectTemplateFormLive, :edit
+      live "/project-templates/:id/files", ProjectTemplateFilesLive
       live "/settings", SettingsLive
       live "/models", ModelsLive
+      live "/projects", ProjectsLive
+      live "/projects/new", ProjectFormLive
+      live "/projects/:id", ProjectLive
       live "/conversations", ConversationsLive
       live "/conversations/new", ConversationFormLive
       live "/conversations/:id", ConversationLive

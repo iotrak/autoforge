@@ -119,7 +119,8 @@ defmodule Autoforge.MixProject do
       {:bandit, "~> 1.5"},
       {:tz, "~> 0.28"},
       {:tz_extra, "~> 0.45"},
-      {:mdex, "~> 0.11"}
+      {:mdex, "~> 0.11"},
+      {:solid, "~> 0.15"}
     ]
   end
 

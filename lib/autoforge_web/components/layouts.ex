@@ -60,6 +60,12 @@ defmodule AutoforgeWeb.Layouts do
             active={@active_page == :conversations}
           />
           <.sidebar_nav_item
+            icon="hero-cube-transparent"
+            label="Projects"
+            href={~p"/projects"}
+            active={@active_page == :projects}
+          />
+          <.sidebar_nav_item
             icon="hero-cpu-chip"
             label="Bots"
             href={~p"/bots"}
@@ -82,6 +88,12 @@ defmodule AutoforgeWeb.Layouts do
             label="Groups"
             href={~p"/user-groups"}
             active={@active_page == :user_groups}
+          />
+          <.sidebar_nav_item
+            icon="hero-rectangle-group"
+            label="Templates"
+            href={~p"/project-templates"}
+            active={@active_page == :templates}
           />
           <.sidebar_nav_item
             icon="hero-cog-6-tooth"

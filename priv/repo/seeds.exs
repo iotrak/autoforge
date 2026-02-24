@@ -396,6 +396,8 @@ ash_phoenix_template =
 
             curl -fsSL https://claude.ai/install.sh | bash
 
+            echo "PATH=$HOME/.local/bin:$PATH" >> $HOME/.bashrc
+
             claude mcp add --transport http tidewave http://localhost:4000/tidewave/mcp
 
             git config --global init.defaultBranch main

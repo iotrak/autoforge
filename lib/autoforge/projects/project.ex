@@ -204,5 +204,7 @@ defmodule Autoforge.Projects.Project do
       source_attribute_on_join_resource :project_id
       destination_attribute_on_join_resource :user_group_id
     end
+
+    has_many :env_vars, Autoforge.Projects.ProjectEnvVar
   end
 end

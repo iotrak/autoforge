@@ -67,14 +67,16 @@ defmodule AutoforgeWeb.UserFormLive do
   def handle_event("validate", %{"form" => params}, socket) do
     form =
       socket.assigns.form.source
-      |> AshPhoenix.Form.validate(params)
+      |> AshPhoenix.Form.validate(maybe_drop_empty_token(params))
       |> to_form()
 
     {:noreply, assign(socket, form: form)}
   end
 
   def handle_event("save", %{"form" => params}, socket) do
-    case AshPhoenix.Form.submit(socket.assigns.form.source, params: params) do
+    case AshPhoenix.Form.submit(socket.assigns.form.source,
+           params: maybe_drop_empty_token(params)
+         ) do
       {:ok, _user} ->
         action = if socket.assigns.editing?, do: "updated", else: "created"
 
@@ -85,6 +87,13 @@ defmodule AutoforgeWeb.UserFormLive do
 
       {:error, form} ->
         {:noreply, assign(socket, form: to_form(form))}
+    end
+  end
+
+  defp maybe_drop_empty_token(params) do
+    case params do
+      %{"github_token" => ""} -> Map.delete(params, "github_token")
+      _ -> params
     end
   end
 
@@ -132,6 +141,18 @@ defmodule AutoforgeWeb.UserFormLive do
                 search_mode="contains"
                 clearable
               />
+
+              <.input
+                field={@form[:github_token]}
+                type="password"
+                label="GitHub Token"
+                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                autocomplete="off"
+                value=""
+              />
+              <p :if={@editing?} class="text-xs text-base-content/50 -mt-2">
+                Leave blank to keep the current token.
+              </p>
 
               <div class="flex items-center gap-3 pt-2">
                 <.button type="submit" variant="solid" color="primary">

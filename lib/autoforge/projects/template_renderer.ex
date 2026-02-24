@@ -32,7 +32,7 @@ defmodule Autoforge.Projects.TemplateRenderer do
   Builds the template variables map for a project.
   """
   def build_variables(%{name: name, db_name: db_name, db_password: db_password} = project) do
-    %{
+    base = %{
       "project_name" => name,
       "db_host" => "db-#{project.id}",
       "db_port" => "5432",
@@ -41,5 +41,15 @@ defmodule Autoforge.Projects.TemplateRenderer do
       "db_user" => "postgres",
       "db_password" => db_password
     }
+
+    case project do
+      %{env_vars: vars} when is_list(vars) ->
+        Enum.reduce(vars, base, fn var, acc ->
+          Map.put(acc, "env_#{String.downcase(var.key)}", var.value)
+        end)
+
+      _ ->
+        base
+    end
   end
 end

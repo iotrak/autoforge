@@ -4,7 +4,7 @@ defmodule Autoforge.Accounts.User do
     domain: Autoforge.Accounts,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
-    extensions: [AshAuthentication]
+    extensions: [AshAuthentication, AshCloak]
 
   authentication do
     add_ons do
@@ -39,6 +39,12 @@ defmodule Autoforge.Accounts.User do
     repo Autoforge.Repo
   end
 
+  cloak do
+    vault(Autoforge.Vault)
+    attributes([:github_token])
+    decrypt_by_default([:github_token])
+  end
+
   actions do
     defaults [:read]
 
@@ -55,16 +61,16 @@ defmodule Autoforge.Accounts.User do
     end
 
     update :update_profile do
-      accept [:name, :timezone]
+      accept [:name, :timezone, :github_token]
       require_atomic? false
     end
 
     create :create_user do
-      accept [:email, :name, :timezone]
+      accept [:email, :name, :timezone, :github_token]
     end
 
     update :update_user do
-      accept [:email, :name, :timezone]
+      accept [:email, :name, :timezone, :github_token]
       require_atomic? false
     end
 
@@ -151,6 +157,12 @@ defmodule Autoforge.Accounts.User do
       public? true
       default "America/New_York"
       constraints max_length: 100
+    end
+
+    attribute :github_token, :string do
+      allow_nil? true
+      public? true
+      constraints max_length: 1024
     end
   end
 

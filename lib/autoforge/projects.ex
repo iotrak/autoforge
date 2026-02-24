@@ -11,5 +11,6 @@ defmodule Autoforge.Projects do
     resource Autoforge.Projects.Project
     resource Autoforge.Projects.ProjectUserGroup
     resource Autoforge.Projects.ProjectTemplateUserGroup
+    resource Autoforge.Projects.ProjectEnvVar
   end
 end

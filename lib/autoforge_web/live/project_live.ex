@@ -272,6 +272,14 @@ defmodule AutoforgeWeb.ProjectLive do
                 </.button>
               </:toggle>
 
+              <.dropdown_link navigate={~p"/projects/#{@project.id}/settings"}>
+                <.icon name="hero-cog-6-tooth" class="icon w-4 h-4" /> Settings
+              </.dropdown_link>
+
+              <.dropdown_separator :if={
+                @project.state == :running && has_dev_server_script?(@project)
+              } />
+
               <.dropdown_button
                 :if={
                   @project.state == :running && !@dev_server_running &&

@@ -1,0 +1,81 @@
+defmodule Autoforge.Projects.ProjectEnvVar do
+  use Ash.Resource,
+    otp_app: :autoforge,
+    domain: Autoforge.Projects,
+    data_layer: AshPostgres.DataLayer,
+    authorizers: [Ash.Policy.Authorizer],
+    extensions: [AshCloak]
+
+  postgres do
+    table "project_env_vars"
+    repo Autoforge.Repo
+
+    references do
+      reference :project, on_delete: :delete
+    end
+  end
+
+  cloak do
+    vault(Autoforge.Vault)
+    attributes([:value])
+    decrypt_by_default([:value])
+  end
+
+  actions do
+    defaults [:read, :destroy]
+
+    create :create do
+      accept [:key, :value, :project_id]
+    end
+
+    update :update do
+      accept [:key, :value]
+    end
+  end
+
+  policies do
+    bypass AshAuthentication.Checks.AshAuthenticationInteraction do
+      authorize_if always()
+    end
+
+    policy action_type([:create, :read, :update, :destroy]) do
+      authorize_if actor_present()
+    end
+  end
+
+  validations do
+    validate match(:key, ~r/^[A-Z_][A-Z0-9_]*$/) do
+      message "must be a valid POSIX environment variable name (uppercase letters, digits, and underscores)"
+    end
+  end
+
+  attributes do
+    uuid_primary_key :id
+
+    attribute :key, :string do
+      allow_nil? false
+      public? true
+      constraints max_length: 255
+    end
+
+    attribute :value, :string do
+      allow_nil? false
+      public? true
+      constraints max_length: 4096
+    end
+
+    create_timestamp :inserted_at
+    update_timestamp :updated_at
+  end
+
+  relationships do
+    belongs_to :project, Autoforge.Projects.Project do
+      allow_nil? false
+      attribute_writable? true
+    end
+  end
+
+  identities do
+    identity :unique_key_per_project, [:project_id, :key]
+  end
+end

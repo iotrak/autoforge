@@ -37,7 +37,7 @@ defmodule Autoforge.Projects.DevServer do
 
   @impl true
   def init(project) do
-    project = Ash.load!(project, [:project_template], authorize?: false)
+    project = Ash.load!(project, [:project_template, :env_vars], authorize?: false)
 
     case build_script(project) do
       {:ok, script} ->
@@ -161,6 +161,8 @@ defmodule Autoforge.Projects.DevServer do
 
     vars = TemplateRenderer.build_variables(project)
 
+    user_env_vars = build_user_env_vars(project)
+
     exec_config = %{
       "AttachStdin" => false,
       "AttachStdout" => true,
@@ -168,19 +170,20 @@ defmodule Autoforge.Projects.DevServer do
       "Tty" => true,
       "Cmd" => ["/bin/sh", "-c", wrapped],
       "WorkingDir" => "/app",
-      "Env" => [
-        "TERM=xterm-256color",
-        "MIX_ENV=dev",
-        "PORT=4000",
-        "DATABASE_URL=postgresql://#{vars["db_user"]}:#{vars["db_password"]}@#{vars["db_host"]}:#{vars["db_port"]}/#{vars["db_name"]}",
-        "DATABASE_TEST_URL=postgresql://#{vars["db_user"]}:#{vars["db_password"]}@#{vars["db_host"]}:#{vars["db_port"]}/#{vars["db_test_name"]}",
-        "DB_HOST=#{vars["db_host"]}",
-        "DB_PORT=#{vars["db_port"]}",
-        "DB_NAME=#{vars["db_name"]}",
-        "DB_TEST_NAME=#{vars["db_test_name"]}",
-        "DB_USER=#{vars["db_user"]}",
-        "DB_PASSWORD=#{vars["db_password"]}"
-      ]
+      "Env" =>
+        [
+          "TERM=xterm-256color",
+          "MIX_ENV=dev",
+          "PORT=4000",
+          "DATABASE_URL=postgresql://#{vars["db_user"]}:#{vars["db_password"]}@#{vars["db_host"]}:#{vars["db_port"]}/#{vars["db_name"]}",
+          "DATABASE_TEST_URL=postgresql://#{vars["db_user"]}:#{vars["db_password"]}@#{vars["db_host"]}:#{vars["db_port"]}/#{vars["db_test_name"]}",
+          "DB_HOST=#{vars["db_host"]}",
+          "DB_PORT=#{vars["db_port"]}",
+          "DB_NAME=#{vars["db_name"]}",
+          "DB_TEST_NAME=#{vars["db_test_name"]}",
+          "DB_USER=#{vars["db_user"]}",
+          "DB_PASSWORD=#{vars["db_password"]}"
+        ] ++ user_env_vars
     }
 
     socket_path = docker_socket_path()
@@ -276,4 +279,10 @@ defmodule Autoforge.Projects.DevServer do
         :error
     end
   end
+
+  defp build_user_env_vars(%{env_vars: vars}) when is_list(vars) do
+    Enum.map(vars, fn var -> "#{var.key}=#{var.value}" end)
+  end
+
+  defp build_user_env_vars(_), do: []
 end

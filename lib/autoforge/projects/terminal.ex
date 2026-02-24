@@ -26,6 +26,7 @@ defmodule Autoforge.Projects.Terminal do
   @impl true
   def init(opts) do
     project = Keyword.fetch!(opts, :project)
+    project = Ash.load!(project, [:env_vars], authorize?: false)
     channel_pid = Keyword.fetch!(opts, :channel_pid)
     monitor_ref = Process.monitor(channel_pid)
 
@@ -108,17 +109,20 @@ defmodule Autoforge.Projects.Terminal do
   end
 
   defp start_exec_session(project) do
+    user_env_vars = build_user_env_vars(project)
+
     exec_config = %{
       "AttachStdin" => true,
       "AttachStdout" => true,
       "AttachStderr" => true,
       "Tty" => true,
       "Cmd" => ["/bin/bash", "-l"],
-      "Env" => [
-        "TERM=xterm-256color",
-        "COLORTERM=truecolor",
-        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin"
-      ]
+      "Env" =>
+        [
+          "TERM=xterm-256color",
+          "COLORTERM=truecolor",
+          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin"
+        ] ++ user_env_vars
     }
 
     socket_path = docker_socket_path()
@@ -228,4 +232,10 @@ defmodule Autoforge.Projects.Terminal do
       )
     end)
   end
+
+  defp build_user_env_vars(%{env_vars: vars}) when is_list(vars) do
+    Enum.map(vars, fn var -> "#{var.key}=#{var.value}" end)
+  end
+
+  defp build_user_env_vars(_), do: []
 end

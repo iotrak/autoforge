@@ -16,7 +16,7 @@ defmodule Autoforge.Projects.Sandbox do
   uploads template files, runs bootstrap script, and transitions to :running.
   """
   def provision(project) do
-    project = Ash.load!(project, [:project_template], authorize?: false)
+    project = Ash.load!(project, [:project_template, :env_vars], authorize?: false)
     variables = TemplateRenderer.build_variables(project)
     network_name = "autoforge-#{project.id}"
     db_alias = "db-#{project.id}"
@@ -155,6 +155,40 @@ defmodule Autoforge.Projects.Sandbox do
     end)
   end
 
+  @doc """
+  Writes a `.autoforge.env` file to the running container with `export KEY='VALUE'`
+  lines for each env var. New exec sessions (terminals, dev server) will pick these up.
+  """
+  def sync_env_vars(project_id) do
+    alias Autoforge.Projects.Project
+
+    project =
+      Project
+      |> Ash.Query.filter(id == ^project_id)
+      |> Ash.Query.load(:env_vars)
+      |> Ash.read_one!(authorize?: false)
+
+    if project && project.container_id && project.state == :running do
+      lines =
+        project.env_vars
+        |> Enum.map(fn var ->
+          escaped = String.replace(var.value, "'", "'\\''")
+          "export #{var.key}='#{escaped}'"
+        end)
+        |> Enum.join("\n")
+
+      content = if lines == "", do: "", else: lines <> "\n"
+
+      Docker.exec_run(project.container_id, [
+        "/bin/sh",
+        "-c",
+        "cat > /app/.autoforge.env << 'AUTOFORGE_EOF'\n#{content}AUTOFORGE_EOF"
+      ])
+    end
+
+    :ok
+  end
+
   # Private helpers
 
   defp allocate_port do
@@ -212,21 +246,24 @@ defmodule Autoforge.Projects.Sandbox do
   defp create_app_container(project, network_id, host_port) do
     template = project.project_template
 
+    user_env_vars = build_user_env_vars(project)
+
     config = %{
       "Image" => template.base_image,
       "Cmd" => ["sleep", "infinity"],
       "WorkingDir" => "/app",
-      "Env" => [
-        "PORT=4000",
-        "DATABASE_URL=postgresql://postgres:#{project.db_password}@db-#{project.id}:5432/#{project.db_name}",
-        "DATABASE_TEST_URL=postgresql://postgres:#{project.db_password}@db-#{project.id}:5432/#{project.db_name}_test",
-        "DB_HOST=db-#{project.id}",
-        "DB_PORT=5432",
-        "DB_NAME=#{project.db_name}",
-        "DB_TEST_NAME=#{project.db_name}_test",
-        "DB_USER=postgres",
-        "DB_PASSWORD=#{project.db_password}"
-      ],
+      "Env" =>
+        [
+          "PORT=4000",
+          "DATABASE_URL=postgresql://postgres:#{project.db_password}@db-#{project.id}:5432/#{project.db_name}",
+          "DATABASE_TEST_URL=postgresql://postgres:#{project.db_password}@db-#{project.id}:5432/#{project.db_name}_test",
+          "DB_HOST=db-#{project.id}",
+          "DB_PORT=5432",
+          "DB_NAME=#{project.db_name}",
+          "DB_TEST_NAME=#{project.db_name}_test",
+          "DB_USER=postgres",
+          "DB_PASSWORD=#{project.db_password}"
+        ] ++ user_env_vars,
       "ExposedPorts" => %{"4000/tcp" => %{}},
       "HostConfig" => %{
         "NetworkMode" => network_id,
@@ -315,6 +352,16 @@ defmodule Autoforge.Projects.Sandbox do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp build_user_env_vars(project) do
+    case project do
+      %{env_vars: vars} when is_list(vars) ->
+        Enum.map(vars, fn var -> "#{var.key}=#{var.value}" end)
+
+      _ ->
+        []
     end
   end
 end

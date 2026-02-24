@@ -23,7 +23,8 @@ defmodule AutoforgeWeb.ProfileLive do
      assign(socket,
        page_title: "Profile",
        form: form,
-       timezone_options: timezone_options
+       timezone_options: timezone_options,
+       token_set?: user.github_token != nil
      )}
   end
 
@@ -31,14 +32,16 @@ defmodule AutoforgeWeb.ProfileLive do
   def handle_event("validate", %{"form" => params}, socket) do
     form =
       socket.assigns.form.source
-      |> AshPhoenix.Form.validate(params)
+      |> AshPhoenix.Form.validate(maybe_drop_empty_token(params))
       |> to_form()
 
     {:noreply, assign(socket, form: form)}
   end
 
   def handle_event("save", %{"form" => params}, socket) do
-    case AshPhoenix.Form.submit(socket.assigns.form.source, params: params) do
+    case AshPhoenix.Form.submit(socket.assigns.form.source,
+           params: maybe_drop_empty_token(params)
+         ) do
       {:ok, user} ->
         form =
           user
@@ -51,12 +54,19 @@ defmodule AutoforgeWeb.ProfileLive do
         socket =
           socket
           |> put_flash(:info, "Profile updated successfully.")
-          |> assign(form: form)
+          |> assign(form: form, token_set?: user.github_token != nil)
 
         {:noreply, socket}
 
       {:error, form} ->
         {:noreply, assign(socket, form: to_form(form))}
+    end
+  end
+
+  defp maybe_drop_empty_token(params) do
+    case params do
+      %{"github_token" => ""} -> Map.delete(params, "github_token")
+      _ -> params
     end
   end
 
@@ -85,6 +95,32 @@ defmodule AutoforgeWeb.ProfileLive do
                 search_mode="contains"
                 clearable
               />
+
+              <div class="border-t border-base-content/10 pt-4 mt-2">
+                <h2 class="text-lg font-semibold mb-1">Integrations</h2>
+                <p class="text-sm text-base-content/60 mb-3">
+                  Connect external services for enhanced functionality.
+                </p>
+
+                <.input
+                  field={@form[:github_token]}
+                  type="password"
+                  label="GitHub Token"
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  autocomplete="off"
+                  value=""
+                />
+                <p class="text-xs text-base-content/50 mt-1">
+                  <%= if @token_set? do %>
+                    <span class="inline-flex items-center gap-1 text-success">
+                      <.icon name="hero-check-circle" class="w-3.5 h-3.5" /> Token configured
+                    </span>
+                    — leave blank to keep your current token.
+                  <% else %>
+                    Enter a GitHub fine-grained personal access token.
+                  <% end %>
+                </p>
+              </div>
 
               <div class="pt-2">
                 <.button type="submit" variant="solid" color="primary">

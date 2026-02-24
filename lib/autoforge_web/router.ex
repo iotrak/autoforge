@@ -59,6 +59,7 @@ defmodule AutoforgeWeb.Router do
       live "/projects", ProjectsLive
       live "/projects/new", ProjectFormLive
       live "/projects/:id", ProjectLive
+      live "/projects/:id/settings", ProjectSettingsLive
       live "/conversations", ConversationsLive
       live "/conversations/new", ConversationFormLive
       live "/conversations/:id", ConversationLive

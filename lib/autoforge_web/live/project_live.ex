@@ -25,12 +25,20 @@ defmodule AutoforgeWeb.ProjectLive do
 
       token = Phoenix.Token.sign(AutoforgeWeb.Endpoint, "user_socket", user.id)
 
+      terminals =
+        if project.state == :running,
+          do: [%{id: "term-1", label: "Terminal 1"}],
+          else: []
+
       {:ok,
        assign(socket,
          page_title: project.name,
          project: project,
          user_token: token,
-         provision_log_started: false
+         provision_log_started: false,
+         terminals: terminals,
+         active_terminal: if(terminals != [], do: "term-1"),
+         terminal_counter: length(terminals)
        )}
     else
       {:ok,
@@ -51,7 +59,20 @@ defmodule AutoforgeWeb.ProjectLive do
       |> Ash.Query.load(:project_template)
       |> Ash.read_one!(authorize?: false)
 
-    {:noreply, assign(socket, project: project)}
+    was_running = socket.assigns.project.state == :running
+    now_running = project.state == :running
+
+    socket = assign(socket, project: project)
+
+    socket =
+      if not was_running and now_running and socket.assigns.terminals == [] do
+        tab = %{id: "term-1", label: "Terminal 1"}
+        assign(socket, terminals: [tab], active_terminal: "term-1", terminal_counter: 1)
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   def handle_info({:provision_log, {:output, chunk}}, socket) do
@@ -69,6 +90,39 @@ defmodule AutoforgeWeb.ProjectLive do
   end
 
   @impl true
+  def handle_event("new_terminal", _params, socket) do
+    counter = socket.assigns.terminal_counter + 1
+    id = "term-#{counter}"
+    tab = %{id: id, label: "Terminal #{counter}"}
+
+    {:noreply,
+     assign(socket,
+       terminals: socket.assigns.terminals ++ [tab],
+       active_terminal: id,
+       terminal_counter: counter
+     )}
+  end
+
+  def handle_event("switch_terminal", %{"id" => id}, socket) do
+    {:noreply, assign(socket, active_terminal: id)}
+  end
+
+  def handle_event("close_terminal", %{"id" => id}, socket) do
+    terminals = Enum.reject(socket.assigns.terminals, &(&1.id == id))
+
+    active =
+      if socket.assigns.active_terminal == id do
+        case terminals do
+          [] -> nil
+          [first | _] -> first.id
+        end
+      else
+        socket.assigns.active_terminal
+      end
+
+    {:noreply, assign(socket, terminals: terminals, active_terminal: active)}
+  end
+
   def handle_event("start", _params, socket) do
     project = socket.assigns.project
 
@@ -225,20 +279,68 @@ defmodule AutoforgeWeb.ProjectLive do
             />
           </div>
 
-          <%!-- Terminal --%>
+          <%!-- Terminal Tabs --%>
           <div :if={@project.state == :running} class="h-full flex flex-col">
-            <div class="px-4 py-2 border-b border-base-300 flex items-center gap-2 flex-shrink-0">
-              <.icon name="hero-command-line" class="w-4 h-4 text-base-content/50" />
-              <span class="text-sm font-medium">Terminal</span>
+            <%!-- Tab Bar --%>
+            <div class="flex items-center bg-base-100 flex-shrink-0 overflow-x-auto">
+              <button
+                :for={tab <- @terminals}
+                phx-click="switch_terminal"
+                phx-value-id={tab.id}
+                class={[
+                  "group flex items-center gap-1.5 px-4 py-2 text-sm border-r border-base-300 transition-colors cursor-pointer",
+                  if(tab.id == @active_terminal,
+                    do: "bg-[#1c1917] text-stone-200",
+                    else: "text-base-content/50 hover:text-base-content hover:bg-base-200"
+                  )
+                ]}
+              >
+                <.icon name="hero-command-line" class="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+                <span
+                  phx-click="close_terminal"
+                  phx-value-id={tab.id}
+                  data-confirm="Close this terminal session?"
+                  class={[
+                    "ml-1 rounded p-0.5 transition-colors",
+                    if(tab.id == @active_terminal,
+                      do: "text-stone-500 hover:text-stone-200 hover:bg-stone-700",
+                      else:
+                        "text-base-content/30 hover:text-base-content/70 hover:bg-base-300 opacity-0 group-hover:opacity-100"
+                    )
+                  ]}
+                >
+                  <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
+                </span>
+              </button>
+              <button
+                phx-click="new_terminal"
+                class="flex items-center px-3 py-2 text-base-content/40 hover:text-base-content/70 transition-colors cursor-pointer"
+                title="New terminal"
+              >
+                <.icon name="hero-plus" class="w-4 h-4" />
+              </button>
             </div>
-            <div
-              id="terminal"
-              phx-hook="Terminal"
-              phx-update="ignore"
-              data-project-id={@project.id}
-              data-user-token={@user_token}
-              class="flex-1 min-h-0"
-            />
+            <%!-- Terminal Panels --%>
+            <div class="flex-1 min-h-0 relative">
+              <div
+                :for={tab <- @terminals}
+                id={"terminal-panel-#{tab.id}"}
+                class={[
+                  "absolute inset-0",
+                  if(tab.id != @active_terminal, do: "invisible")
+                ]}
+              >
+                <div
+                  id={tab.id}
+                  phx-hook="Terminal"
+                  phx-update="ignore"
+                  data-project-id={@project.id}
+                  data-user-token={@user_token}
+                  class="h-full"
+                />
+              </div>
+            </div>
           </div>
 
           <%!-- Idle State (stopped/creating without logs) --%>

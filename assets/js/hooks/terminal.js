@@ -56,13 +56,29 @@ const TerminalHook = {
 
     // Resize handling
     this.resizeObserver = new ResizeObserver(() => {
+      if (this.el.clientWidth === 0 || this.el.clientHeight === 0) return;
       this.fitAddon.fit();
       const dims = this.fitAddon.proposeDimensions();
-      if (dims) {
+      if (dims && this.channel) {
         this.channel.push("resize", { cols: dims.cols, rows: dims.rows });
       }
     });
     this.resizeObserver.observe(this.el);
+
+    // Re-fit when parent panel becomes visible (tab switch)
+    const panel = this.el.parentElement;
+    if (panel) {
+      this.mutationObserver = new MutationObserver(() => {
+        if (!panel.classList.contains("invisible")) {
+          this.fitAddon.fit();
+          this.term.focus();
+        }
+      });
+      this.mutationObserver.observe(panel, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    }
   },
 
   destroyed() {
@@ -77,6 +93,9 @@ const TerminalHook = {
     }
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
+    }
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
     }
   },
 };

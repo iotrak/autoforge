@@ -159,6 +159,8 @@ defmodule Autoforge.Projects.DevServer do
     # making PID tracking cleaner. Use set -e so early lines fail fast.
     wrapped = "set -e\n#{script}"
 
+    vars = TemplateRenderer.build_variables(project)
+
     exec_config = %{
       "AttachStdin" => false,
       "AttachStdout" => true,
@@ -169,7 +171,15 @@ defmodule Autoforge.Projects.DevServer do
       "Env" => [
         "TERM=xterm-256color",
         "MIX_ENV=dev",
-        "PORT=4000"
+        "PORT=4000",
+        "DATABASE_URL=postgresql://#{vars["db_user"]}:#{vars["db_password"]}@#{vars["db_host"]}:#{vars["db_port"]}/#{vars["db_name"]}",
+        "DATABASE_TEST_URL=postgresql://#{vars["db_user"]}:#{vars["db_password"]}@#{vars["db_host"]}:#{vars["db_port"]}/#{vars["db_test_name"]}",
+        "DB_HOST=#{vars["db_host"]}",
+        "DB_PORT=#{vars["db_port"]}",
+        "DB_NAME=#{vars["db_name"]}",
+        "DB_TEST_NAME=#{vars["db_test_name"]}",
+        "DB_USER=#{vars["db_user"]}",
+        "DB_PASSWORD=#{vars["db_password"]}"
       ]
     }
 

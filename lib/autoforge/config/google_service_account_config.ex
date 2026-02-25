@@ -21,12 +21,12 @@ defmodule Autoforge.Config.GoogleServiceAccountConfig do
     defaults [:read, :destroy]
 
     create :create do
-      accept [:service_account_json, :enabled]
+      accept [:label, :service_account_json, :enabled]
       change {__MODULE__.ParseServiceAccountJson, []}
     end
 
     update :update do
-      accept [:service_account_json, :enabled]
+      accept [:label, :service_account_json, :enabled]
       require_atomic? false
       change {__MODULE__.ParseServiceAccountJson, []}
     end
@@ -40,6 +40,11 @@ defmodule Autoforge.Config.GoogleServiceAccountConfig do
 
   attributes do
     uuid_primary_key :id
+
+    attribute :label, :string do
+      allow_nil? false
+      public? true
+    end
 
     attribute :service_account_json, :string do
       allow_nil? false

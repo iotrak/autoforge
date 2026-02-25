@@ -78,7 +78,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
     tools = ToolResolver.resolve(bot, participant_ids)
     tools = inject_delegate_context(tools, bot, conversation, participant_ids)
     tools = inject_github_context(tools, conversation)
-    tools = inject_google_workspace_context(tools)
+    tools = inject_google_workspace_context(tools, conversation)
 
     base_opts =
       [api_key: api_key, system_prompt: system_prompt]
@@ -509,7 +509,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
     "directory_" => ["https://www.googleapis.com/auth/admin.directory.user.readonly"]
   }
 
-  defp inject_google_workspace_context(tools) do
+  defp inject_google_workspace_context(tools, conversation) do
     gw_tool_names =
       tools
       |> Enum.filter(fn tool ->
@@ -520,21 +520,38 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
     if gw_tool_names == [] do
       tools
     else
-      tool_configs = load_google_workspace_configs(gw_tool_names)
+      delegate_email = sender_email(conversation)
 
-      Enum.map(tools, fn tool ->
-        case Map.get(tool_configs, tool.name) do
-          nil ->
-            tool
+      if delegate_email do
+        tool_configs = load_google_workspace_configs(gw_tool_names, delegate_email)
 
-          {token, _config} ->
-            %{tool | callback: build_google_workspace_callback(tool.name, token)}
-        end
-      end)
+        Enum.map(tools, fn tool ->
+          case Map.get(tool_configs, tool.name) do
+            nil ->
+              tool
+
+            token ->
+              %{tool | callback: build_google_workspace_callback(tool.name, token)}
+          end
+        end)
+      else
+        Logger.warning("No sender email found for Google Workspace tool delegation")
+        tools
+      end
     end
   end
 
-  defp load_google_workspace_configs(tool_names) do
+  defp sender_email(conversation) do
+    conversation.messages
+    |> Enum.filter(&(&1.role == :user && &1.user != nil))
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+    |> case do
+      [latest | _] -> to_string(latest.user.email)
+      [] -> nil
+    end
+  end
+
+  defp load_google_workspace_configs(tool_names, delegate_email) do
     alias Autoforge.Ai.Tool, as: ToolResource
     alias Autoforge.Config.GoogleServiceAccountConfig
     alias Autoforge.Google.Auth
@@ -551,7 +568,6 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
     |> Enum.reduce(%{}, fn tool, acc ->
       %Ash.Union{value: config} = tool.config
       sa_id = config.google_service_account_config_id
-      delegate_email = config.delegate_email
       prefix = google_workspace_prefix(tool.name)
       scopes = Map.get(@scope_map, prefix, [])
 
@@ -559,7 +575,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
         {:ok, sa_config} ->
           case Auth.get_delegated_access_token(sa_config, scopes, delegate_email) do
             {:ok, token} ->
-              Map.put(acc, tool.name, {token, config})
+              Map.put(acc, tool.name, token)
 
             {:error, reason} ->
               Logger.warning("Failed to get Google token for #{tool.name}: #{inspect(reason)}")

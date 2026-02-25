@@ -6,10 +6,5 @@ defmodule Autoforge.Ai.ToolConfigs.GoogleWorkspaceConfig do
       allow_nil? false
       public? true
     end
-
-    attribute :delegate_email, :string do
-      allow_nil? false
-      public? true
-    end
   end
 end

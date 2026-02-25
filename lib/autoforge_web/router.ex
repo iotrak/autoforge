@@ -56,6 +56,8 @@ defmodule AutoforgeWeb.Router do
       live "/project-templates/:id/files", ProjectTemplateFilesLive
       live "/settings", SettingsLive
       live "/models", ModelsLive
+      live "/tools", ToolsLive
+      live "/tools/:id", ToolShowLive
       live "/projects", ProjectsLive
       live "/projects/new", ProjectFormLive
       live "/projects/:id", ProjectLive

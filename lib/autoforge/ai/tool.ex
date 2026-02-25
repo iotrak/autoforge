@@ -27,7 +27,7 @@ defmodule Autoforge.Ai.Tool do
       authorize_if always()
     end
 
-    policy action_type(:read) do
+    policy action_type([:read, :update]) do
       authorize_if actor_present()
     end
   end

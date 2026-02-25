@@ -82,6 +82,12 @@ defmodule AutoforgeWeb.Layouts do
             active={@active_page == :models}
           />
           <.sidebar_nav_item
+            icon="hero-wrench-screwdriver"
+            label="Tools"
+            href={~p"/tools"}
+            active={@active_page == :tools}
+          />
+          <.sidebar_nav_item
             icon="hero-users"
             label="Users"
             href={~p"/users"}

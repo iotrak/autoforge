@@ -148,6 +148,21 @@ defmodule Autoforge.Projects.Terminal do
     # Only configure git if it's available in the container
     case Docker.exec_run(container_id, ["which", "git"]) do
       {:ok, %{exit_code: 0}} ->
+        # Install openssh-client as root if SSH signing will be used (provides ssh-keygen)
+        if user.ssh_private_key && user.ssh_public_key do
+          run_setup_commands(
+            container_id,
+            [
+              [
+                "/bin/bash",
+                "-c",
+                "which ssh-keygen >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null 2>&1)"
+              ]
+            ],
+            "openssh-client install"
+          )
+        end
+
         commands =
           [
             ["git", "config", "--global", "init.defaultBranch", "main"],

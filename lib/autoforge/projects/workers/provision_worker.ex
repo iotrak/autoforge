@@ -5,6 +5,8 @@ defmodule Autoforge.Projects.Workers.ProvisionWorker do
 
   use Oban.Worker, queue: :sandbox, max_attempts: 3
 
+  alias Autoforge.Accounts.User
+  alias Autoforge.GitHub.RepoSetup
   alias Autoforge.Projects.{Project, Sandbox}
 
   require Ash.Query
@@ -44,8 +46,9 @@ defmodule Autoforge.Projects.Workers.ProvisionWorker do
 
       project ->
         case Sandbox.provision(project) do
-          {:ok, _project} ->
+          {:ok, provisioned_project} ->
             Logger.info("ProvisionWorker: project #{project_id} provisioned successfully")
+            maybe_setup_github_remote(provisioned_project)
             :ok
 
           {:error, reason} ->
@@ -66,6 +69,40 @@ defmodule Autoforge.Projects.Workers.ProvisionWorker do
         {:error, reason}
     end
   end
+
+  defp maybe_setup_github_remote(%{github_repo_owner: owner, github_repo_name: name} = project)
+       when is_binary(owner) and owner != "" and is_binary(name) and name != "" do
+    user =
+      User
+      |> Ash.Query.filter(id == ^project.user_id)
+      |> Ash.read_one!(authorize?: false)
+
+    if user && user.github_token do
+      case RepoSetup.configure_remote(project.container_id, owner, name) do
+        :ok ->
+          case RepoSetup.initial_push(project.container_id) do
+            :ok ->
+              Logger.info(
+                "ProvisionWorker: GitHub remote configured and pushed for #{project.id}"
+              )
+
+            {:error, reason} ->
+              Logger.warning(
+                "ProvisionWorker: GitHub remote configured but push failed for #{project.id}: #{inspect(reason)}"
+              )
+          end
+
+        {:error, reason} ->
+          Logger.warning(
+            "ProvisionWorker: failed to configure GitHub remote for #{project.id}: #{inspect(reason)}"
+          )
+      end
+    else
+      Logger.info("ProvisionWorker: skipping GitHub remote setup — no token for #{project.id}")
+    end
+  end
+
+  defp maybe_setup_github_remote(_project), do: :ok
 
   defp cleanup_partial(project) do
     alias Autoforge.Projects.Docker

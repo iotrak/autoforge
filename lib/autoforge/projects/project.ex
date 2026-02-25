@@ -42,7 +42,7 @@ defmodule Autoforge.Projects.Project do
     defaults [:read]
 
     create :create do
-      accept [:name, :project_template_id, :db_password]
+      accept [:name, :project_template_id, :db_password, :github_repo_owner, :github_repo_name]
 
       argument :env_vars, {:array, :map}
 
@@ -127,6 +127,17 @@ defmodule Autoforge.Projects.Project do
       end
     end
 
+    update :link_github_repo do
+      accept [:github_repo_owner, :github_repo_name]
+      require_atomic? false
+    end
+
+    update :unlink_github_repo do
+      require_atomic? false
+      change set_attribute(:github_repo_owner, nil)
+      change set_attribute(:github_repo_name, nil)
+    end
+
     destroy :destroy do
       require_atomic? false
     end
@@ -204,6 +215,18 @@ defmodule Autoforge.Projects.Project do
     attribute :tailscale_hostname, :string do
       allow_nil? true
       public? true
+    end
+
+    attribute :github_repo_owner, :string do
+      allow_nil? true
+      public? true
+      constraints max_length: 255
+    end
+
+    attribute :github_repo_name, :string do
+      allow_nil? true
+      public? true
+      constraints max_length: 255
     end
 
     attribute :last_activity_at, :utc_datetime do

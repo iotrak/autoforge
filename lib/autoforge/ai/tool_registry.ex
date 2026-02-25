@@ -76,8 +76,151 @@ defmodule Autoforge.Ai.ToolRegistry do
           callback: fn _args ->
             {:error, "delegate_task requires conversation context — this is a bug"}
           end
+        ),
+
+      # ── GitHub Tools ──────────────────────────────────────────────────────
+
+      "github_get_repo" =>
+        ReqLLM.Tool.new!(
+          name: "github_get_repo",
+          description: "Get information about a GitHub repository.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner (user or org)"],
+            repo: [type: :string, required: true, doc: "Repository name"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_list_issues" =>
+        ReqLLM.Tool.new!(
+          name: "github_list_issues",
+          description: "List issues in a GitHub repository. Returns open issues by default.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            state: [type: :string, doc: "Filter by state: open, closed, or all (default: open)"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_create_issue" =>
+        ReqLLM.Tool.new!(
+          name: "github_create_issue",
+          description: "Create a new issue in a GitHub repository.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            title: [type: :string, required: true, doc: "Issue title"],
+            body: [type: :string, required: true, doc: "Issue body (Markdown)"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_get_issue" =>
+        ReqLLM.Tool.new!(
+          name: "github_get_issue",
+          description: "Get details of a specific GitHub issue by number.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            number: [type: :integer, required: true, doc: "Issue number"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_comment_on_issue" =>
+        ReqLLM.Tool.new!(
+          name: "github_comment_on_issue",
+          description: "Add a comment to a GitHub issue or pull request.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            number: [type: :integer, required: true, doc: "Issue or PR number"],
+            body: [type: :string, required: true, doc: "Comment body (Markdown)"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_list_pull_requests" =>
+        ReqLLM.Tool.new!(
+          name: "github_list_pull_requests",
+          description: "List pull requests in a GitHub repository. Returns open PRs by default.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            state: [type: :string, doc: "Filter by state: open, closed, or all (default: open)"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_create_pull_request" =>
+        ReqLLM.Tool.new!(
+          name: "github_create_pull_request",
+          description: "Create a new pull request in a GitHub repository.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            title: [type: :string, required: true, doc: "PR title"],
+            body: [type: :string, required: true, doc: "PR description (Markdown)"],
+            head: [type: :string, required: true, doc: "Branch containing changes"],
+            base: [type: :string, required: true, doc: "Branch to merge into"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_get_pull_request" =>
+        ReqLLM.Tool.new!(
+          name: "github_get_pull_request",
+          description: "Get details of a specific pull request by number.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            number: [type: :integer, required: true, doc: "PR number"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_merge_pull_request" =>
+        ReqLLM.Tool.new!(
+          name: "github_merge_pull_request",
+          description: "Merge a pull request in a GitHub repository.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            number: [type: :integer, required: true, doc: "PR number"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_get_file" =>
+        ReqLLM.Tool.new!(
+          name: "github_get_file",
+          description:
+            "Get the content of a file from a GitHub repository. Returns the decoded file content.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            path: [type: :string, required: true, doc: "File path within the repository"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_list_workflow_runs" =>
+        ReqLLM.Tool.new!(
+          name: "github_list_workflow_runs",
+          description: "List recent GitHub Actions workflow runs for a repository.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"]
+          ],
+          callback: &github_not_available/1
+        ),
+      "github_get_workflow_run_logs" =>
+        ReqLLM.Tool.new!(
+          name: "github_get_workflow_run_logs",
+          description: "Download logs for a specific GitHub Actions workflow run.",
+          parameter_schema: [
+            owner: [type: :string, required: true, doc: "Repository owner"],
+            repo: [type: :string, required: true, doc: "Repository name"],
+            run_id: [type: :integer, required: true, doc: "Workflow run ID"]
+          ],
+          callback: &github_not_available/1
         )
     }
+  end
+
+  defp github_not_available(_args) do
+    {:error, "GitHub token not available — ask the user to set one in their profile"}
   end
 
   defp fetch_url(url, redirects_remaining) do

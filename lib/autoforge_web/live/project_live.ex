@@ -268,7 +268,16 @@ defmodule AutoforgeWeb.ProjectLive do
             </span>
           </div>
 
-          <div class="flex items-center gap-1.5 text-sm text-base-content/50 ml-auto flex-shrink-0">
+          <div class="flex items-center gap-3 text-sm text-base-content/50 ml-auto flex-shrink-0">
+            <.link
+              :if={@project.github_repo_owner && @project.github_repo_name}
+              href={"https://github.com/#{@project.github_repo_owner}/#{@project.github_repo_name}"}
+              target="_blank"
+              class="inline-flex items-center gap-1 text-base-content/50 hover:text-primary transition-colors"
+            >
+              <.icon name="hero-code-bracket" class="w-4 h-4" />
+              <span class="text-xs">{@project.github_repo_owner}/{@project.github_repo_name}</span>
+            </.link>
             <span :if={@project.project_template}>
               {@project.project_template.name}
             </span>

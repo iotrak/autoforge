@@ -27,18 +27,36 @@ defmodule AutoforgeWeb.ProjectFormLive do
      assign(socket,
        page_title: "New Project",
        form: form,
-       template_options: template_options
+       template_options: template_options,
+       github_token_available: user.github_token != nil and user.github_token != "",
+       create_github_repo: false,
+       github_repo_name: "",
+       github_repo_org: "",
+       github_repo_private: true
      )}
   end
 
   @impl true
-  def handle_event("validate", %{"form" => params}, socket) do
+  def handle_event("validate", params, socket) do
     form =
       socket.assigns.form.source
-      |> AshPhoenix.Form.validate(params)
+      |> AshPhoenix.Form.validate(params["form"] || %{})
       |> to_form()
 
-    {:noreply, assign(socket, form: form)}
+    github_assigns =
+      []
+      |> then(fn a ->
+        if params["github_repo_name"],
+          do: [{:github_repo_name, params["github_repo_name"]} | a],
+          else: a
+      end)
+      |> then(fn a ->
+        if params["github_repo_org"],
+          do: [{:github_repo_org, params["github_repo_org"]} | a],
+          else: a
+      end)
+
+    {:noreply, assign(socket, [{:form, form} | github_assigns])}
   end
 
   def handle_event("add_env_var", _params, socket) do
@@ -59,9 +77,21 @@ defmodule AutoforgeWeb.ProjectFormLive do
     {:noreply, assign(socket, form: form)}
   end
 
+  def handle_event("toggle_github_repo", _params, socket) do
+    {:noreply, assign(socket, create_github_repo: !socket.assigns.create_github_repo)}
+  end
+
+  def handle_event("toggle_github_private", _params, socket) do
+    {:noreply, assign(socket, github_repo_private: !socket.assigns.github_repo_private)}
+  end
+
   def handle_event("save", %{"form" => params}, socket) do
+    params = maybe_add_github_params(params, socket.assigns)
+
     case AshPhoenix.Form.submit(socket.assigns.form.source, params: params) do
       {:ok, project} ->
+        maybe_create_github_repo(project, socket.assigns)
+
         {:noreply,
          socket
          |> put_flash(:info, "Project created. Provisioning started...")
@@ -71,6 +101,56 @@ defmodule AutoforgeWeb.ProjectFormLive do
         {:noreply, assign(socket, form: to_form(form))}
     end
   end
+
+  defp maybe_add_github_params(params, %{create_github_repo: true} = assigns) do
+    repo_name = String.trim(assigns.github_repo_name)
+    org = String.trim(assigns.github_repo_org)
+
+    if repo_name != "" do
+      owner =
+        if org != "" do
+          org
+        else
+          case Autoforge.GitHub.Client.get_authenticated_user(assigns.current_user.github_token) do
+            {:ok, %{"login" => login}} -> login
+            _ -> nil
+          end
+        end
+
+      if owner do
+        params
+        |> Map.put("github_repo_owner", owner)
+        |> Map.put("github_repo_name", repo_name)
+      else
+        params
+      end
+    else
+      params
+    end
+  end
+
+  defp maybe_add_github_params(params, _assigns), do: params
+
+  defp maybe_create_github_repo(project, %{create_github_repo: true} = assigns) do
+    repo_name = String.trim(assigns.github_repo_name)
+
+    if repo_name != "" do
+      org = String.trim(assigns.github_repo_org)
+      org_arg = if org != "", do: org
+
+      Task.Supervisor.start_child(Autoforge.TaskSupervisor, fn ->
+        Autoforge.GitHub.RepoSetup.create_and_link(
+          project,
+          assigns.current_user.github_token,
+          repo_name,
+          org_arg,
+          private: assigns.github_repo_private
+        )
+      end)
+    end
+  end
+
+  defp maybe_create_github_repo(_project, _assigns), do: :ok
 
   @impl true
   def render(assigns) do
@@ -167,6 +247,60 @@ defmodule AutoforgeWeb.ProjectFormLive do
                 >
                   No environment variables added yet.
                 </p>
+              </div>
+
+              <div :if={@github_token_available} class="space-y-3">
+                <div class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="create-github-repo"
+                    checked={@create_github_repo}
+                    phx-click="toggle_github_repo"
+                    class="checkbox checkbox-sm checkbox-primary"
+                  />
+                  <label for="create-github-repo" class="text-sm font-semibold cursor-pointer">
+                    Create a GitHub repository
+                  </label>
+                </div>
+
+                <div :if={@create_github_repo} class="pl-6 space-y-3">
+                  <div>
+                    <label class="text-sm font-medium text-base-content/70">Repository Name</label>
+                    <input
+                      type="text"
+                      name="github_repo_name"
+                      value={@github_repo_name}
+                      placeholder="my-project"
+                      class="input input-bordered input-sm w-full mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="text-sm font-medium text-base-content/70">
+                      Organization (optional)
+                    </label>
+                    <input
+                      type="text"
+                      name="github_repo_org"
+                      value={@github_repo_org}
+                      placeholder="Leave blank for personal account"
+                      class="input input-bordered input-sm w-full mt-1"
+                    />
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="github-repo-private"
+                      checked={@github_repo_private}
+                      phx-click="toggle_github_private"
+                      class="checkbox checkbox-sm checkbox-primary"
+                    />
+                    <label for="github-repo-private" class="text-sm cursor-pointer">
+                      Private repository
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div class="flex items-center gap-3 pt-2">

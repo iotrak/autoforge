@@ -77,6 +77,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
     participant_ids = Enum.map(conversation.participants, & &1.id)
     tools = ToolResolver.resolve(bot, participant_ids)
     tools = inject_delegate_context(tools, bot, conversation, participant_ids)
+    tools = inject_github_context(tools, conversation)
 
     base_opts =
       [api_key: api_key, system_prompt: system_prompt]
@@ -405,6 +406,94 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
 
       {:cancel, reason} ->
         {:error, "Could not load bot #{target_bot.name}: #{reason}"}
+    end
+  end
+
+  # ── GitHub Context ────────────────────────────────────────────────────────
+
+  defp inject_github_context(tools, conversation) do
+    case find_github_token(conversation.participants) do
+      nil ->
+        tools
+
+      token ->
+        Enum.map(tools, fn
+          %{name: "github_" <> _} = tool ->
+            %{tool | callback: build_github_callback(tool.name, token)}
+
+          tool ->
+            tool
+        end)
+    end
+  end
+
+  defp find_github_token(participants) do
+    Enum.find_value(participants, & &1.github_token)
+  end
+
+  defp build_github_callback(tool_name, token) do
+    fn args -> execute_github_tool(tool_name, args, token) end
+  end
+
+  defp execute_github_tool(tool_name, args, token) do
+    alias Autoforge.GitHub.Client
+
+    result =
+      case tool_name do
+        "github_get_repo" ->
+          Client.get_repo(token, args.owner, args.repo)
+
+        "github_list_issues" ->
+          opts = if args[:state], do: [state: args.state], else: []
+          Client.list_issues(token, args.owner, args.repo, opts)
+
+        "github_create_issue" ->
+          Client.create_issue(token, args.owner, args.repo, %{
+            "title" => args.title,
+            "body" => args.body
+          })
+
+        "github_get_issue" ->
+          Client.get_issue(token, args.owner, args.repo, args.number)
+
+        "github_comment_on_issue" ->
+          Client.create_issue_comment(token, args.owner, args.repo, args.number, args.body)
+
+        "github_list_pull_requests" ->
+          opts = if args[:state], do: [state: args.state], else: []
+          Client.list_pull_requests(token, args.owner, args.repo, opts)
+
+        "github_create_pull_request" ->
+          Client.create_pull_request(token, args.owner, args.repo, %{
+            "title" => args.title,
+            "body" => args.body,
+            "head" => args.head,
+            "base" => args.base
+          })
+
+        "github_get_pull_request" ->
+          Client.get_pull_request(token, args.owner, args.repo, args.number)
+
+        "github_merge_pull_request" ->
+          Client.merge_pull_request(token, args.owner, args.repo, args.number)
+
+        "github_get_file" ->
+          Client.get_file_content(token, args.owner, args.repo, args.path)
+
+        "github_list_workflow_runs" ->
+          Client.list_workflow_runs(token, args.owner, args.repo)
+
+        "github_get_workflow_run_logs" ->
+          Client.download_workflow_run_logs(token, args.owner, args.repo, args.run_id)
+
+        _ ->
+          {:error, "Unknown GitHub tool: #{tool_name}"}
+      end
+
+    case result do
+      {:ok, data} when is_map(data) or is_list(data) -> {:ok, Jason.encode!(data)}
+      {:ok, data} when is_binary(data) -> {:ok, data}
+      {:error, reason} -> {:error, to_string(reason)}
     end
   end
 

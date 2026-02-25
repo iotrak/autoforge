@@ -92,6 +92,12 @@ if anthropic_key do
   delegate_task =
     Tool |> Ash.Query.filter(name == "delegate_task") |> Ash.read_one!(authorize?: false)
 
+  # Look up GitHub tools
+  github_tools =
+    Tool
+    |> Ash.Query.filter(contains(name, "github_"))
+    |> Ash.read!(authorize?: false)
+
   # Look up user groups
   admins =
     UserGroup |> Ash.Query.filter(name == "Administrators") |> Ash.read_one!(authorize?: false)
@@ -114,7 +120,7 @@ if anthropic_key do
       model: opus_model,
       temperature: 0.6,
       max_tokens: 4096,
-      tools: [get_url, delegate_task],
+      tools: [get_url, delegate_task] ++ github_tools,
       groups: [admins, devs],
       system_prompt: """
       You are the Elixir Architect, a senior systems designer specializing in Elixir and OTP.
@@ -161,7 +167,7 @@ if anthropic_key do
       model: sonnet_model,
       temperature: 0.5,
       max_tokens: 4096,
-      tools: [get_url, delegate_task],
+      tools: [get_url, delegate_task] ++ github_tools,
       groups: [admins, devs],
       system_prompt: """
       You are the Phoenix Guide, an expert in the Phoenix Framework v1.8.
@@ -187,7 +193,7 @@ if anthropic_key do
       model: sonnet_model,
       temperature: 0.3,
       max_tokens: 8192,
-      tools: [get_url, get_time, delegate_task],
+      tools: [get_url, get_time, delegate_task] ++ github_tools,
       groups: [admins, devs],
       system_prompt: """
       You are the Code Crafter, a production code generator for Elixir, Ash, and Phoenix projects.
@@ -212,7 +218,7 @@ if anthropic_key do
       model: opus_model,
       temperature: 0.4,
       max_tokens: 4096,
-      tools: [get_url, delegate_task],
+      tools: [get_url, delegate_task] ++ github_tools,
       groups: [admins, devs],
       system_prompt: """
       You are the Code Reviewer, an expert at reviewing Elixir, Ash, and Phoenix code.
@@ -338,8 +344,8 @@ if anthropic_key do
   # ── UserGroup-Tool assignments ──────────────────────────────────────────────
 
   user_group_tool_matrix = [
-    {admins, [get_url, get_time, delegate_task]},
-    {devs, [get_url, get_time, delegate_task]},
+    {admins, [get_url, get_time, delegate_task] ++ github_tools},
+    {devs, [get_url, get_time, delegate_task] ++ github_tools},
     {testers, [get_time, delegate_task]}
   ]
 

@@ -14,7 +14,7 @@ config :ash_oban, pro?: false
 config :autoforge, Oban,
   engine: Oban.Engines.Basic,
   notifier: Oban.Notifiers.Postgres,
-  queues: [default: 10, ai: 5, sandbox: 3],
+  queues: [default: 10, ai: 5, sandbox: 3, github: 3],
   repo: Autoforge.Repo,
   plugins: [
     {Oban.Plugins.Cron,

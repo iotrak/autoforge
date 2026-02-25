@@ -214,11 +214,19 @@ defmodule Autoforge.Projects.Tailscale do
   defp upload_serve_config(container_id) do
     serve_config =
       Jason.encode!(%{
-        "TCP" => %{"443" => %{"HTTPS" => true}},
+        "TCP" => %{
+          "443" => %{"HTTPS" => true},
+          "8443" => %{"HTTPS" => true}
+        },
         "Web" => %{
           "${TS_CERT_DOMAIN}:443" => %{
             "Handlers" => %{
               "/" => %{"Proxy" => "http://127.0.0.1:4000"}
+            }
+          },
+          "${TS_CERT_DOMAIN}:8443" => %{
+            "Handlers" => %{
+              "/" => %{"Proxy" => "http://127.0.0.1:8080"}
             }
           }
         }

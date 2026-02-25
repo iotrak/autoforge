@@ -37,8 +37,11 @@ defmodule Autoforge.Projects.ProjectFiles do
       if project.state == :running && project.container_id do
         Task.Supervisor.start_child(Autoforge.TaskSupervisor, fn ->
           case sync_file_to_container(project, project_file) do
-            :ok -> Logger.info("Synced file #{filename} to container for project #{project.id}")
-            {:error, reason} -> Logger.warning("Failed to sync file #{filename} to container: #{inspect(reason)}")
+            :ok ->
+              Logger.info("Synced file #{filename} to container for project #{project.id}")
+
+            {:error, reason} ->
+              Logger.warning("Failed to sync file #{filename} to container: #{inspect(reason)}")
           end
         end)
       end

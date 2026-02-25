@@ -106,7 +106,7 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
           id={"var-#{var}-#{System.unique_integer([:positive])}"}
           phx-hook="CopyToClipboard"
           data-clipboard-text={"{{ #{var} }}"}
-          data-copied-html={"<span class='text-success text-[10px]'>Copied!</span>"}
+          data-copied-html="<span class='text-success text-[10px]'>Copied!</span>"
           class="px-1.5 py-0.5 rounded bg-base-300 text-base-content/70 font-mono cursor-pointer hover:bg-primary/15 hover:text-primary transition-colors"
         >
           {"{{ #{var} }}"}
@@ -114,7 +114,7 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
         <:content>
           <p class="text-xs">
             <span class="font-semibold text-base-content">{var}</span>
-            <span class="text-base-content/60"> — {desc}</span>
+            <span class="text-base-content/60"> —  {desc}</span>
           </p>
           <p class="text-[10px] text-base-content/40 mt-1">Click to copy</p>
         </:content>

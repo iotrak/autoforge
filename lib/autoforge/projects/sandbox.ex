@@ -32,6 +32,7 @@ defmodule Autoforge.Projects.Sandbox do
 
     with {:ok, project} <- transition(project, :provision),
          {:ok, host_port} <- allocate_port(),
+         {:ok, code_server_port} <- allocate_port(),
          :ok <-
            log_and_run(project, "Pulling image #{db_image}...", fn ->
              Docker.pull_image(db_image)
@@ -57,7 +58,7 @@ defmodule Autoforge.Projects.Sandbox do
          :ok <- create_test_database(db_container_id, project),
          {:ok, app_container_id} <-
            log_and_run(project, "Creating application container...", fn ->
-             create_app_container(project, network_id, host_port)
+             create_app_container(project, network_id, host_port, code_server_port)
            end),
          :ok <- Docker.start_container(app_container_id),
          {ts_container_id, ts_hostname} <-
@@ -72,6 +73,7 @@ defmodule Autoforge.Projects.Sandbox do
            log_and_run(project, "Creating app user...", fn ->
              create_sandbox_user(app_container_id)
            end),
+         :ok <- install_code_server(app_container_id, project),
          :ok <- run_startup_script(app_container_id, project, variables),
          _ <- sync_project_files(project),
          _ <- broadcast_provision_log(project, "Provisioning complete"),
@@ -83,6 +85,7 @@ defmodule Autoforge.Projects.Sandbox do
                db_container_id: db_container_id,
                network_id: network_id,
                host_port: host_port,
+               code_server_port: code_server_port,
                tailscale_container_id: ts_container_id,
                tailscale_hostname: ts_hostname
              },
@@ -271,7 +274,7 @@ defmodule Autoforge.Projects.Sandbox do
     Docker.create_container(config, name: "autoforge-db-#{project.id}")
   end
 
-  defp create_app_container(project, network_id, host_port) do
+  defp create_app_container(project, network_id, host_port, code_server_port) do
     template = project.project_template
 
     user_env_vars = build_user_env_vars(project)
@@ -292,10 +295,13 @@ defmodule Autoforge.Projects.Sandbox do
           "DB_USER=postgres",
           "DB_PASSWORD=#{project.db_password}"
         ] ++ user_env_vars,
-      "ExposedPorts" => %{"4000/tcp" => %{}},
+      "ExposedPorts" => %{"4000/tcp" => %{}, "8080/tcp" => %{}},
       "HostConfig" => %{
         "NetworkMode" => network_id,
-        "PortBindings" => %{"4000/tcp" => [%{"HostPort" => to_string(host_port)}]}
+        "PortBindings" => %{
+          "4000/tcp" => [%{"HostPort" => to_string(host_port)}],
+          "8080/tcp" => [%{"HostPort" => to_string(code_server_port)}]
+        }
       }
     }
 
@@ -427,6 +433,25 @@ defmodule Autoforge.Projects.Sandbox do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp install_code_server(container_id, project) do
+    broadcast_provision_log(project, "Installing code-server...")
+
+    script = """
+    if command -v code-server >/dev/null 2>&1; then
+      exit 0
+    fi
+    curl -fsSL https://code-server.dev/install.sh | sh
+    """
+
+    callback = fn chunk -> broadcast_provision_log(project, {:output, chunk}) end
+
+    case Docker.exec_stream(container_id, ["/bin/bash", "-c", script], callback) do
+      {:ok, 0} -> :ok
+      {:ok, code} -> {:error, "code-server install failed (exit #{code})"}
+      {:error, reason} -> {:error, reason}
     end
   end
 

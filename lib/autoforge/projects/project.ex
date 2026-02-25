@@ -85,6 +85,7 @@ defmodule Autoforge.Projects.Project do
         :db_container_id,
         :network_id,
         :host_port,
+        :code_server_port,
         :tailscale_container_id,
         :tailscale_hostname
       ]
@@ -203,6 +204,11 @@ defmodule Autoforge.Projects.Project do
     end
 
     attribute :host_port, :integer do
+      allow_nil? true
+      public? true
+    end
+
+    attribute :code_server_port, :integer do
       allow_nil? true
       public? true
     end

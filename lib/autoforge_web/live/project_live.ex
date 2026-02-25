@@ -1,7 +1,7 @@
 defmodule AutoforgeWeb.ProjectLive do
   use AutoforgeWeb, :live_view
 
-  alias Autoforge.Projects.{DevServer, Project, Sandbox}
+  alias Autoforge.Projects.{CodeServer, DevServer, Project, Sandbox}
 
   require Ash.Query
 
@@ -22,11 +22,13 @@ defmodule AutoforgeWeb.ProjectLive do
         Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:updated:#{project.id}")
         Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:provision_log:#{project.id}")
         Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:dev_server:#{project.id}")
+        Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:code_server:#{project.id}")
       end
 
       token = Phoenix.Token.sign(AutoforgeWeb.Endpoint, "user_socket", user.id)
 
       dev_server_running = DevServer.running?(project.id)
+      code_server_running = CodeServer.running?(project.id)
 
       terminals =
         if project.state == :running,
@@ -43,7 +45,10 @@ defmodule AutoforgeWeb.ProjectLive do
          active_terminal: if(terminals != [], do: "term-1"),
          terminal_counter: length(terminals),
          dev_server_running: dev_server_running,
-         dev_server_tab_open: dev_server_running
+         dev_server_tab_open: dev_server_running,
+         code_server_running: code_server_running,
+         code_server_ready: code_server_running && CodeServer.ready?(project.id),
+         code_server_tab_open: code_server_running
        )}
     else
       {:ok,
@@ -100,6 +105,18 @@ defmodule AutoforgeWeb.ProjectLive do
 
   def handle_info({:dev_server_stopped, _reason}, socket) do
     {:noreply, assign(socket, dev_server_running: false)}
+  end
+
+  def handle_info({:code_server_started}, socket) do
+    {:noreply, assign(socket, code_server_ready: true)}
+  end
+
+  def handle_info({:code_server_output, _chunk}, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_info({:code_server_stopped, _reason}, socket) do
+    {:noreply, assign(socket, code_server_running: false, code_server_ready: false)}
   end
 
   @impl true
@@ -202,6 +219,49 @@ defmodule AutoforgeWeb.ProjectLive do
     {:noreply, assign(socket, dev_server_running: false)}
   end
 
+  def handle_event("start_code_server", _params, socket) do
+    project = socket.assigns.project
+
+    if is_nil(project.code_server_port) do
+      {:noreply,
+       put_flash(
+         socket,
+         :error,
+         "Editor requires reprovisioning. Please stop and destroy this project, then recreate it."
+       )}
+    else
+      case DynamicSupervisor.start_child(
+             Autoforge.Projects.CodeServerSupervisor,
+             {CodeServer, project}
+           ) do
+        {:ok, _pid} ->
+          {:noreply,
+           assign(socket,
+             code_server_running: true,
+             code_server_tab_open: true,
+             active_terminal: "code-server"
+           )}
+
+        {:error, {:already_started, _pid}} ->
+          {:noreply,
+           assign(socket,
+             code_server_running: true,
+             code_server_tab_open: true,
+             active_terminal: "code-server"
+           )}
+
+        {:error, reason} ->
+          {:noreply,
+           put_flash(socket, :error, "Failed to start code-server: #{inspect(reason)}")}
+      end
+    end
+  end
+
+  def handle_event("stop_code_server", _params, socket) do
+    CodeServer.stop(socket.assigns.project.id)
+    {:noreply, assign(socket, code_server_running: false, code_server_ready: false)}
+  end
+
   defp state_badge_class(state) do
     case state do
       :creating -> "badge-info"
@@ -237,6 +297,20 @@ defmodule AutoforgeWeb.ProjectLive do
   end
 
   defp project_url(_), do: nil
+
+  defp code_server_url(%{tailscale_hostname: hostname, code_server_port: _} = project)
+       when is_binary(hostname) do
+    case Autoforge.Projects.Tailscale.get_tailnet_name() do
+      {:ok, tailnet} -> "https://#{hostname}.#{tailnet}:8443/?folder=/app"
+      :disabled -> "http://localhost:#{project.code_server_port}/?folder=/app"
+    end
+  end
+
+  defp code_server_url(%{code_server_port: port}) when is_integer(port) do
+    "http://localhost:#{port}/?folder=/app"
+  end
+
+  defp code_server_url(_), do: nil
 
   @impl true
   def render(assigns) do
@@ -327,6 +401,22 @@ defmodule AutoforgeWeb.ProjectLive do
                 <.icon name="hero-arrow-top-right-on-square" class="icon w-4 h-4" /> Open in Browser
               </.dropdown_link>
 
+              <.dropdown_separator :if={@project.state == :running} />
+
+              <.dropdown_button
+                :if={@project.state == :running && !@code_server_running}
+                phx-click="start_code_server"
+              >
+                <.icon name="hero-code-bracket-square" class="icon w-4 h-4" /> Open Editor
+              </.dropdown_button>
+
+              <.dropdown_button
+                :if={@project.state == :running && @code_server_running}
+                phx-click="stop_code_server"
+              >
+                <.icon name="hero-code-bracket-square" class="icon w-4 h-4" /> Stop Editor
+              </.dropdown_button>
+
               <.dropdown_separator :if={
                 @project.state == :running && has_dev_server_script?(@project)
               } />
@@ -414,6 +504,31 @@ defmodule AutoforgeWeb.ProjectLive do
                   class="w-2 h-2 rounded-full bg-green-400 ml-1"
                 />
               </button>
+              <%!-- Editor Tab --%>
+              <button
+                :if={@code_server_tab_open}
+                phx-click="switch_terminal"
+                phx-value-id="code-server"
+                class={[
+                  "group flex items-center gap-1.5 px-4 py-2 text-sm transition-colors cursor-pointer",
+                  if("code-server" == @active_terminal,
+                    do: "bg-[#1c1917] text-stone-100 border-b-2 border-b-amber-500",
+                    else:
+                      "bg-[#0c0a09] text-stone-500 hover:text-stone-300 hover:bg-stone-800/50 border-b-2 border-b-transparent"
+                  )
+                ]}
+              >
+                <.icon name="hero-code-bracket-square" class="w-3.5 h-3.5" />
+                <span>Editor</span>
+                <span
+                  :if={@code_server_running && !@code_server_ready}
+                  class="loading loading-spinner loading-xs ml-1"
+                />
+                <span
+                  :if={@code_server_ready}
+                  class="w-2 h-2 rounded-full bg-green-400 ml-1"
+                />
+              </button>
               <%!-- Terminal Tabs --%>
               <button
                 :for={tab <- @terminals}
@@ -470,6 +585,31 @@ defmodule AutoforgeWeb.ProjectLive do
                   phx-hook="DevServer"
                   phx-update="ignore"
                   class="h-full"
+                />
+              </div>
+              <%!-- Editor Panel --%>
+              <div
+                :if={@code_server_tab_open}
+                id="terminal-panel-code-server"
+                class={[
+                  "absolute inset-0",
+                  if("code-server" != @active_terminal, do: "invisible")
+                ]}
+              >
+                <div
+                  :if={!@code_server_ready}
+                  class="h-full flex items-center justify-center text-base-content/30"
+                >
+                  <div class="text-center">
+                    <span class="loading loading-spinner loading-lg mb-3" />
+                    <p class="text-sm">Starting editor...</p>
+                  </div>
+                </div>
+                <iframe
+                  :if={@code_server_ready}
+                  src={code_server_url(@project)}
+                  class="w-full h-full border-0"
+                  allow="clipboard-read; clipboard-write"
                 />
               </div>
               <%!-- Terminal Panels --%>

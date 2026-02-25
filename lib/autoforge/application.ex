@@ -23,6 +23,8 @@ defmodule Autoforge.Application do
       {Task.Supervisor, name: Autoforge.TaskSupervisor},
       {Registry, keys: :unique, name: Autoforge.DevServerRegistry},
       {DynamicSupervisor, name: Autoforge.Projects.DevServerSupervisor, strategy: :one_for_one},
+      {Registry, keys: :unique, name: Autoforge.CodeServerRegistry},
+      {DynamicSupervisor, name: Autoforge.Projects.CodeServerSupervisor, strategy: :one_for_one},
       # Start to serve requests, typically the last entry
       AutoforgeWeb.Endpoint,
       Autoforge.Projects.DevServerCleanup,

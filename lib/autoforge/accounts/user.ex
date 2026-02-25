@@ -41,8 +41,8 @@ defmodule Autoforge.Accounts.User do
 
   cloak do
     vault(Autoforge.Vault)
-    attributes([:github_token])
-    decrypt_by_default([:github_token])
+    attributes([:github_token, :ssh_private_key])
+    decrypt_by_default([:github_token, :ssh_private_key])
   end
 
   actions do
@@ -63,6 +63,18 @@ defmodule Autoforge.Accounts.User do
     update :update_profile do
       accept [:name, :timezone, :github_token]
       require_atomic? false
+    end
+
+    update :regenerate_ssh_key do
+      require_atomic? false
+
+      change fn changeset, _context ->
+        {pub, priv} = Autoforge.Accounts.SSHKeygen.generate()
+
+        changeset
+        |> Ash.Changeset.force_change_attribute(:ssh_public_key, pub)
+        |> AshCloak.encrypt_and_set(:ssh_private_key, priv)
+      end
     end
 
     create :create_user do
@@ -127,6 +139,10 @@ defmodule Autoforge.Accounts.User do
       authorize_if expr(id == ^actor(:id))
     end
 
+    policy action(:regenerate_ssh_key) do
+      authorize_if expr(id == ^actor(:id))
+    end
+
     policy action([:create_user, :update_user, :destroy]) do
       authorize_if actor_present()
     end
@@ -163,6 +179,16 @@ defmodule Autoforge.Accounts.User do
       allow_nil? true
       public? true
       constraints max_length: 1024
+    end
+
+    attribute :ssh_public_key, :string do
+      allow_nil? true
+      public? true
+    end
+
+    attribute :ssh_private_key, :string do
+      allow_nil? true
+      public? true
     end
   end
 

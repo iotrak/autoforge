@@ -261,13 +261,28 @@ const ChatInput = {
   },
 };
 
+const CopyToClipboard = {
+  mounted() {
+    this.el.addEventListener("click", () => {
+      const text = this.el.dataset.clipboardText;
+      if (text) {
+        navigator.clipboard.writeText(text).then(() => {
+          const original = this.el.innerHTML;
+          this.el.innerHTML = this.el.dataset.copiedHtml || "Copied!";
+          setTimeout(() => (this.el.innerHTML = original), 2000);
+        });
+      }
+    });
+  },
+};
+
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
   .getAttribute("content");
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
-  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput, Terminal: TerminalHook, ProvisionLog: ProvisionLogHook, DevServer: DevServerHook, SortableTable: SortableTableHook },
+  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput, CopyToClipboard, Terminal: TerminalHook, ProvisionLog: ProvisionLogHook, DevServer: DevServerHook, SortableTable: SortableTableHook },
   dom: {
     onBeforeElUpdated(from, to) {
       FluxonDOM.onBeforeElUpdated(from, to);

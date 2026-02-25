@@ -28,7 +28,7 @@ defmodule AutoforgeWeb.TerminalChannel do
 
       true ->
         {:ok, terminal_pid} =
-          Terminal.start_link(project: project, channel_pid: self())
+          Terminal.start_link(project: project, user: user, channel_pid: self())
 
         {:ok, assign(socket, :terminal_pid, terminal_pid)}
     end

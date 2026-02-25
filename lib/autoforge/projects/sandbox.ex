@@ -289,12 +289,29 @@ defmodule Autoforge.Projects.Sandbox do
     else
       case Docker.exec_run(container_id, ["pg_isready", "-U", "postgres"]) do
         {:ok, %{exit_code: 0}} ->
-          :ok
+          # pg_isready can succeed during the postgres Docker image's first init phase,
+          # before it restarts to apply final configuration. Verify with an actual query
+          # to ensure postgres is fully ready and accepting real connections.
+          verify_postgres_connection(container_id)
 
         _ ->
           Process.sleep(@pg_ready_delay_ms)
           wait_for_postgres(container_id, attempt + 1)
       end
+    end
+  end
+
+  defp verify_postgres_connection(container_id, attempt \\ 1) do
+    case Docker.exec_run(container_id, ["psql", "-U", "postgres", "-c", "SELECT 1"]) do
+      {:ok, %{exit_code: 0}} ->
+        :ok
+
+      _ when attempt < @pg_ready_attempts ->
+        Process.sleep(@pg_ready_delay_ms)
+        verify_postgres_connection(container_id, attempt + 1)
+
+      _ ->
+        {:error, :postgres_not_ready}
     end
   end
 

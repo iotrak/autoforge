@@ -7,6 +7,8 @@ defmodule Autoforge.Projects.Terminal do
 
   use GenServer
 
+  alias Autoforge.Projects.Docker
+
   require Logger
 
   defstruct [:socket, :exec_id, :channel_pid, :project, :monitor_ref]
@@ -27,8 +29,11 @@ defmodule Autoforge.Projects.Terminal do
   def init(opts) do
     project = Keyword.fetch!(opts, :project)
     project = Ash.load!(project, [:env_vars], authorize?: false)
+    user = Keyword.fetch!(opts, :user)
     channel_pid = Keyword.fetch!(opts, :channel_pid)
     monitor_ref = Process.monitor(channel_pid)
+
+    setup_container_user_config(project.container_id, user)
 
     case start_exec_session(project) do
       {:ok, socket, exec_id, initial_data} ->
@@ -102,6 +107,89 @@ defmodule Autoforge.Projects.Terminal do
   end
 
   # Private helpers
+
+  defp setup_container_user_config(container_id, user) do
+    if user.ssh_private_key && user.ssh_public_key do
+      inject_ssh_keys(container_id, user)
+    end
+
+    configure_git(container_id, user)
+  rescue
+    e ->
+      Logger.warning("Container user config setup failed: #{inspect(e)}")
+  end
+
+  defp inject_ssh_keys(container_id, user) do
+    ssh_config = "Host *\n  StrictHostKeyChecking accept-new\n"
+
+    commands = [
+      ["mkdir", "-p", "/root/.ssh"],
+      [
+        "/bin/bash",
+        "-c",
+        "cat > /root/.ssh/id_ed25519 << 'SSHEOF'\n#{user.ssh_private_key}SSHEOF"
+      ],
+      ["chmod", "600", "/root/.ssh/id_ed25519"],
+      [
+        "/bin/bash",
+        "-c",
+        "cat > /root/.ssh/id_ed25519.pub << 'SSHEOF'\n#{user.ssh_public_key}\nSSHEOF"
+      ],
+      ["chmod", "644", "/root/.ssh/id_ed25519.pub"],
+      ["/bin/bash", "-c", "cat > /root/.ssh/config << 'SSHEOF'\n#{ssh_config}SSHEOF"],
+      ["chmod", "600", "/root/.ssh/config"]
+    ]
+
+    run_setup_commands(container_id, commands, "SSH key injection")
+  end
+
+  defp configure_git(container_id, user) do
+    # Only configure git if it's available in the container
+    case Docker.exec_run(container_id, ["which", "git"]) do
+      {:ok, %{exit_code: 0}} ->
+        commands =
+          [
+            ["git", "config", "--global", "init.defaultBranch", "main"],
+            ["git", "config", "--global", "user.email", to_string(user.email)]
+          ] ++
+            if(user.name, do: [["git", "config", "--global", "user.name", user.name]], else: []) ++
+            if user.ssh_private_key && user.ssh_public_key do
+              [
+                ["git", "config", "--global", "gpg.format", "ssh"],
+                [
+                  "git",
+                  "config",
+                  "--global",
+                  "user.signingkey",
+                  "/root/.ssh/id_ed25519.pub"
+                ],
+                ["git", "config", "--global", "commit.gpgsign", "true"]
+              ]
+            else
+              []
+            end
+
+        run_setup_commands(container_id, commands, "Git configuration")
+
+      _ ->
+        Logger.debug("git not available in container #{container_id}, skipping git config")
+    end
+  end
+
+  defp run_setup_commands(container_id, commands, label) do
+    Enum.each(commands, fn cmd ->
+      case Docker.exec_run(container_id, cmd) do
+        {:ok, %{exit_code: 0}} ->
+          :ok
+
+        {:ok, %{exit_code: code, output: out}} ->
+          Logger.warning("#{label} command failed (exit #{code}): #{out}")
+
+        {:error, reason} ->
+          Logger.warning("#{label} command error: #{inspect(reason)}")
+      end
+    end)
+  end
 
   defp docker_socket_path do
     Application.get_env(:autoforge, Autoforge.Projects.Docker, [])[:socket_path] ||

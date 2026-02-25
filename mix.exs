@@ -74,6 +74,7 @@ defmodule Autoforge.MixProject do
       {:sourceror, "~> 1.8", only: [:dev, :test]},
       {:oban, "~> 2.0"},
       {:usage_rules, "~> 1.0", only: [:dev]},
+      {:goth, "~> 1.4"},
       {:ash_cloak, "~> 0.2"},
       {:cloak, "~> 1.0"},
       {:tidewave, "~> 0.5", only: [:dev]},

@@ -37,6 +37,12 @@ defmodule AutoforgeWeb.SettingsLive do
           id="google-service-account"
           current_user={@current_user}
         />
+
+        <.live_component
+          module={AutoforgeWeb.GcsStorageConfigComponent}
+          id="gcs-storage-config"
+          current_user={@current_user}
+        />
       </div>
     </Layouts.app>
     """

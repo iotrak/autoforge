@@ -25,6 +25,8 @@ defmodule Autoforge.Application do
       {DynamicSupervisor, name: Autoforge.Projects.DevServerSupervisor, strategy: :one_for_one},
       {Registry, keys: :unique, name: Autoforge.CodeServerRegistry},
       {DynamicSupervisor, name: Autoforge.Projects.CodeServerSupervisor, strategy: :one_for_one},
+      Hermes.Server.Registry,
+      {Autoforge.Mcp.Server, transport: :streamable_http},
       # Start to serve requests, typically the last entry
       AutoforgeWeb.Endpoint,
       Autoforge.Projects.DevServerCleanup,

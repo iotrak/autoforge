@@ -121,7 +121,8 @@ defmodule Autoforge.MixProject do
       {:tz, "~> 0.28"},
       {:tz_extra, "~> 0.45"},
       {:mdex, "~> 0.11"},
-      {:solid, "~> 0.15"}
+      {:solid, "~> 0.15"},
+      {:hermes_mcp, "~> 0.14"}
     ]
   end
 

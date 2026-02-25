@@ -105,10 +105,16 @@ defmodule AutoforgeWeb.Router do
     )
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", AutoforgeWeb do
-  #   pipe_through :api
-  # end
+  pipeline :mcp do
+    plug :accepts, ["json"]
+    plug AutoforgeWeb.Plugs.MCPAuth
+  end
+
+  scope "/mcp" do
+    pipe_through :mcp
+
+    forward "/", Hermes.Server.Transport.StreamableHTTP.Plug, server: Autoforge.Mcp.Server
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:autoforge, :dev_routes) do

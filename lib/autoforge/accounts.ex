@@ -11,5 +11,6 @@ defmodule Autoforge.Accounts do
     resource Autoforge.Accounts.LlmProviderKey
     resource Autoforge.Accounts.UserGroup
     resource Autoforge.Accounts.UserGroupMembership
+    resource Autoforge.Accounts.ApiKey
   end
 end

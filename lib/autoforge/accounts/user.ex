@@ -31,6 +31,10 @@ defmodule Autoforge.Accounts.User do
       end
 
       remember_me :remember_me
+
+      api_key do
+        api_key_relationship :valid_api_keys
+      end
     end
   end
 
@@ -47,6 +51,11 @@ defmodule Autoforge.Accounts.User do
 
   actions do
     defaults [:read]
+
+    read :sign_in_with_api_key do
+      argument :api_key, :string, allow_nil?: false
+      prepare AshAuthentication.Strategy.ApiKey.SignInPreparation
+    end
 
     read :get_by_subject do
       description "Get a user by the subject claim in a JWT"
@@ -197,6 +206,10 @@ defmodule Autoforge.Accounts.User do
       through Autoforge.Accounts.UserGroupMembership
       source_attribute_on_join_resource :user_id
       destination_attribute_on_join_resource :user_group_id
+    end
+
+    has_many :valid_api_keys, Autoforge.Accounts.ApiKey do
+      filter expr(valid)
     end
   end
 

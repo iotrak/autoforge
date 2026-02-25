@@ -28,6 +28,7 @@ import { Hooks as FluxonHooks, DOM as FluxonDOM } from "fluxon";
 import TerminalHook, { ProvisionLogHook, DevServerHook } from "./hooks/terminal";
 import SortableTableHook from "./hooks/sortable_table";
 import DropZoneHook from "./hooks/drop_zone";
+import PopoverGroupHook from "./hooks/popover_group";
 
 const ChatScroll = {
   mounted() {
@@ -283,7 +284,7 @@ const csrfToken = document
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
-  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput, CopyToClipboard, Terminal: TerminalHook, ProvisionLog: ProvisionLogHook, DevServer: DevServerHook, SortableTable: SortableTableHook, DropZone: DropZoneHook },
+  hooks: { ...colocatedHooks, ...FluxonHooks, ChatScroll, ChatInput, CopyToClipboard, Terminal: TerminalHook, ProvisionLog: ProvisionLogHook, DevServer: DevServerHook, SortableTable: SortableTableHook, DropZone: DropZoneHook, PopoverGroup: PopoverGroupHook },
   dom: {
     onBeforeElUpdated(from, to) {
       FluxonDOM.onBeforeElUpdated(from, to);

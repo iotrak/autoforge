@@ -95,7 +95,11 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
     assigns = assign(assigns, :variables, @template_variables)
 
     ~H"""
-    <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-base-content/50">
+    <div
+      id={"var-group-#{System.unique_integer([:positive])}"}
+      phx-hook="PopoverGroup"
+      class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-base-content/50"
+    >
       <span>Variables:</span>
       <.popover :for={{var, desc} <- @variables} open_on_hover placement="top" class="max-w-xs">
         <code

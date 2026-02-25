@@ -215,12 +215,281 @@ defmodule Autoforge.Ai.ToolRegistry do
             run_id: [type: :integer, required: true, doc: "Workflow run ID"]
           ],
           callback: &github_not_available/1
+        ),
+
+      # ── Gmail Tools ──────────────────────────────────────────────────────
+
+      "gmail_list_messages" =>
+        ReqLLM.Tool.new!(
+          name: "gmail_list_messages",
+          description:
+            "List Gmail messages matching a search query. Returns message IDs and thread IDs. Use gmail_get_message to fetch full content.",
+          parameter_schema: [
+            query: [
+              type: :string,
+              doc: "Gmail search query (same syntax as the Gmail search box)"
+            ],
+            max_results: [
+              type: :integer,
+              doc: "Maximum number of messages to return (default: 10)"
+            ]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "gmail_get_message" =>
+        ReqLLM.Tool.new!(
+          name: "gmail_get_message",
+          description:
+            "Get the full content of a Gmail message by ID, including headers, body, and labels.",
+          parameter_schema: [
+            message_id: [type: :string, required: true, doc: "The message ID to retrieve"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "gmail_send_message" =>
+        ReqLLM.Tool.new!(
+          name: "gmail_send_message",
+          description: "Send an email via Gmail.",
+          parameter_schema: [
+            to: [type: :string, required: true, doc: "Recipient email address"],
+            subject: [type: :string, required: true, doc: "Email subject line"],
+            body: [type: :string, required: true, doc: "Email body (plain text)"],
+            cc: [type: :string, doc: "CC email address"],
+            bcc: [type: :string, doc: "BCC email address"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "gmail_modify_labels" =>
+        ReqLLM.Tool.new!(
+          name: "gmail_modify_labels",
+          description:
+            "Add or remove labels on a Gmail message. Use gmail_list_labels to find available label IDs.",
+          parameter_schema: [
+            message_id: [type: :string, required: true, doc: "The message ID to modify"],
+            add_label_ids: [type: {:list, :string}, doc: "Label IDs to add"],
+            remove_label_ids: [type: {:list, :string}, doc: "Label IDs to remove"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "gmail_list_labels" =>
+        ReqLLM.Tool.new!(
+          name: "gmail_list_labels",
+          description: "List all Gmail labels for the delegated user's mailbox.",
+          parameter_schema: [],
+          callback: &google_workspace_not_available/1
+        ),
+
+      # ── Calendar Tools ───────────────────────────────────────────────────
+
+      "calendar_list_calendars" =>
+        ReqLLM.Tool.new!(
+          name: "calendar_list_calendars",
+          description: "List all calendars the delegated user has access to.",
+          parameter_schema: [],
+          callback: &google_workspace_not_available/1
+        ),
+      "calendar_list_events" =>
+        ReqLLM.Tool.new!(
+          name: "calendar_list_events",
+          description:
+            "List events from a Google Calendar. Defaults to the primary calendar if no calendar_id is given.",
+          parameter_schema: [
+            calendar_id: [type: :string, doc: "Calendar ID (default: \"primary\")"],
+            time_min: [type: :string, doc: "Start of time range (ISO8601 datetime)"],
+            time_max: [type: :string, doc: "End of time range (ISO8601 datetime)"],
+            max_results: [type: :integer, doc: "Maximum number of events to return"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "calendar_get_event" =>
+        ReqLLM.Tool.new!(
+          name: "calendar_get_event",
+          description: "Get details of a specific calendar event.",
+          parameter_schema: [
+            calendar_id: [type: :string, doc: "Calendar ID (default: \"primary\")"],
+            event_id: [type: :string, required: true, doc: "The event ID to retrieve"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "calendar_create_event" =>
+        ReqLLM.Tool.new!(
+          name: "calendar_create_event",
+          description: "Create a new event on a Google Calendar.",
+          parameter_schema: [
+            calendar_id: [type: :string, doc: "Calendar ID (default: \"primary\")"],
+            summary: [type: :string, required: true, doc: "Event title"],
+            start_time: [type: :string, required: true, doc: "Start time (ISO8601 datetime)"],
+            end_time: [type: :string, required: true, doc: "End time (ISO8601 datetime)"],
+            description: [type: :string, doc: "Event description"],
+            location: [type: :string, doc: "Event location"],
+            attendees: [type: {:list, :string}, doc: "List of attendee email addresses"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "calendar_update_event" =>
+        ReqLLM.Tool.new!(
+          name: "calendar_update_event",
+          description: "Update an existing calendar event. Only provided fields will be changed.",
+          parameter_schema: [
+            calendar_id: [type: :string, doc: "Calendar ID (default: \"primary\")"],
+            event_id: [type: :string, required: true, doc: "The event ID to update"],
+            summary: [type: :string, doc: "Event title"],
+            start_time: [type: :string, doc: "Start time (ISO8601 datetime)"],
+            end_time: [type: :string, doc: "End time (ISO8601 datetime)"],
+            description: [type: :string, doc: "Event description"],
+            location: [type: :string, doc: "Event location"],
+            attendees: [type: {:list, :string}, doc: "List of attendee email addresses"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "calendar_delete_event" =>
+        ReqLLM.Tool.new!(
+          name: "calendar_delete_event",
+          description: "Delete a calendar event.",
+          parameter_schema: [
+            calendar_id: [type: :string, doc: "Calendar ID (default: \"primary\")"],
+            event_id: [type: :string, required: true, doc: "The event ID to delete"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "calendar_freebusy_query" =>
+        ReqLLM.Tool.new!(
+          name: "calendar_freebusy_query",
+          description:
+            "Query free/busy information for one or more calendars within a time range.",
+          parameter_schema: [
+            time_min: [
+              type: :string,
+              required: true,
+              doc: "Start of time range (ISO8601 datetime)"
+            ],
+            time_max: [type: :string, required: true, doc: "End of time range (ISO8601 datetime)"],
+            calendar_ids: [
+              type: {:list, :string},
+              required: true,
+              doc: "List of calendar IDs to check"
+            ]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+
+      # ── Drive Tools ──────────────────────────────────────────────────────
+
+      "drive_list_files" =>
+        ReqLLM.Tool.new!(
+          name: "drive_list_files",
+          description:
+            "List files in Google Drive. Supports Drive query syntax for filtering (e.g., \"name contains 'report'\").",
+          parameter_schema: [
+            query: [type: :string, doc: "Drive search query (Google Drive query syntax)"],
+            page_size: [type: :integer, doc: "Maximum number of files to return"],
+            include_shared_drives: [
+              type: :boolean,
+              doc: "Whether to include shared drive files (default: true)"
+            ]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "drive_get_file" =>
+        ReqLLM.Tool.new!(
+          name: "drive_get_file",
+          description:
+            "Get metadata for a Google Drive file (name, size, MIME type, permissions, etc.).",
+          parameter_schema: [
+            file_id: [type: :string, required: true, doc: "The file ID to retrieve"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "drive_download_file" =>
+        ReqLLM.Tool.new!(
+          name: "drive_download_file",
+          description:
+            "Download the content of a Google Drive file. Large files will be truncated to ~50KB.",
+          parameter_schema: [
+            file_id: [type: :string, required: true, doc: "The file ID to download"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "drive_upload_file" =>
+        ReqLLM.Tool.new!(
+          name: "drive_upload_file",
+          description: "Upload a file to Google Drive.",
+          parameter_schema: [
+            name: [type: :string, required: true, doc: "File name"],
+            content: [type: :string, required: true, doc: "File content"],
+            mime_type: [type: :string, required: true, doc: "MIME type (e.g., \"text/plain\")"],
+            parent_id: [type: :string, doc: "Parent folder ID to upload into"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "drive_update_file" =>
+        ReqLLM.Tool.new!(
+          name: "drive_update_file",
+          description: "Update a Google Drive file's metadata (rename, move between folders).",
+          parameter_schema: [
+            file_id: [type: :string, required: true, doc: "The file ID to update"],
+            name: [type: :string, doc: "New file name"],
+            add_parents: [type: :string, doc: "Comma-separated parent folder IDs to add"],
+            remove_parents: [type: :string, doc: "Comma-separated parent folder IDs to remove"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "drive_copy_file" =>
+        ReqLLM.Tool.new!(
+          name: "drive_copy_file",
+          description: "Create a copy of a Google Drive file.",
+          parameter_schema: [
+            file_id: [type: :string, required: true, doc: "The file ID to copy"],
+            name: [type: :string, doc: "Name for the copy"],
+            parent_id: [type: :string, doc: "Parent folder ID for the copy"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "drive_list_shared_drives" =>
+        ReqLLM.Tool.new!(
+          name: "drive_list_shared_drives",
+          description: "List shared drives the delegated user has access to.",
+          parameter_schema: [],
+          callback: &google_workspace_not_available/1
+        ),
+
+      # ── Directory Tools ──────────────────────────────────────────────────
+
+      "directory_list_users" =>
+        ReqLLM.Tool.new!(
+          name: "directory_list_users",
+          description: "List users in a Google Workspace domain.",
+          parameter_schema: [
+            domain: [type: :string, required: true, doc: "The domain to list users for"],
+            query: [type: :string, doc: "Search query for filtering users"],
+            max_results: [type: :integer, doc: "Maximum number of users to return"]
+          ],
+          callback: &google_workspace_not_available/1
+        ),
+      "directory_get_user" =>
+        ReqLLM.Tool.new!(
+          name: "directory_get_user",
+          description:
+            "Get details of a specific user in the Google Workspace directory by email or user ID.",
+          parameter_schema: [
+            user_key: [
+              type: :string,
+              required: true,
+              doc: "User's email address, alias, or unique user ID"
+            ]
+          ],
+          callback: &google_workspace_not_available/1
         )
     }
   end
 
   defp github_not_available(_args) do
     {:error, "GitHub token not available — ask the user to set one in their profile"}
+  end
+
+  defp google_workspace_not_available(_args) do
+    {:error,
+     "Google Workspace not configured — assign a tool config with a service account and delegate email"}
   end
 
   defp fetch_url(url, redirects_remaining) do

@@ -78,6 +78,7 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
     tools = ToolResolver.resolve(bot, participant_ids)
     tools = inject_delegate_context(tools, bot, conversation, participant_ids)
     tools = inject_github_context(tools, conversation)
+    tools = inject_google_workspace_context(tools)
 
     base_opts =
       [api_key: api_key, system_prompt: system_prompt]
@@ -495,6 +496,277 @@ defmodule Autoforge.Chat.Workers.BotResponseWorker do
       {:ok, data} when is_binary(data) -> {:ok, data}
       {:error, reason} -> {:error, to_string(reason)}
     end
+  end
+
+  # ── Google Workspace Context ──────────────────────────────────────────
+
+  @google_workspace_prefixes ["gmail_", "calendar_", "drive_", "directory_"]
+
+  @scope_map %{
+    "gmail_" => ["https://www.googleapis.com/auth/gmail.modify"],
+    "calendar_" => ["https://www.googleapis.com/auth/calendar"],
+    "drive_" => ["https://www.googleapis.com/auth/drive"],
+    "directory_" => ["https://www.googleapis.com/auth/admin.directory.user.readonly"]
+  }
+
+  defp inject_google_workspace_context(tools) do
+    gw_tool_names =
+      tools
+      |> Enum.filter(fn tool ->
+        Enum.any?(@google_workspace_prefixes, &String.starts_with?(tool.name, &1))
+      end)
+      |> Enum.map(& &1.name)
+
+    if gw_tool_names == [] do
+      tools
+    else
+      tool_configs = load_google_workspace_configs(gw_tool_names)
+
+      Enum.map(tools, fn tool ->
+        case Map.get(tool_configs, tool.name) do
+          nil ->
+            tool
+
+          {token, _config} ->
+            %{tool | callback: build_google_workspace_callback(tool.name, token)}
+        end
+      end)
+    end
+  end
+
+  defp load_google_workspace_configs(tool_names) do
+    alias Autoforge.Ai.Tool, as: ToolResource
+    alias Autoforge.Config.GoogleServiceAccountConfig
+    alias Autoforge.Google.Auth
+
+    db_tools =
+      ToolResource
+      |> Ash.Query.filter(name in ^tool_names)
+      |> Ash.read!(authorize?: false)
+
+    db_tools
+    |> Enum.filter(fn t ->
+      match?(%Ash.Union{type: :google_workspace}, t.config)
+    end)
+    |> Enum.reduce(%{}, fn tool, acc ->
+      %Ash.Union{value: config} = tool.config
+      sa_id = config.google_service_account_config_id
+      delegate_email = config.delegate_email
+      prefix = google_workspace_prefix(tool.name)
+      scopes = Map.get(@scope_map, prefix, [])
+
+      case Ash.get(GoogleServiceAccountConfig, sa_id, authorize?: false) do
+        {:ok, sa_config} ->
+          case Auth.get_delegated_access_token(sa_config, scopes, delegate_email) do
+            {:ok, token} ->
+              Map.put(acc, tool.name, {token, config})
+
+            {:error, reason} ->
+              Logger.warning("Failed to get Google token for #{tool.name}: #{inspect(reason)}")
+              acc
+          end
+
+        _ ->
+          Logger.warning("Service account config not found for tool #{tool.name}")
+          acc
+      end
+    end)
+  end
+
+  defp google_workspace_prefix(tool_name) do
+    Enum.find(@google_workspace_prefixes, fn prefix ->
+      String.starts_with?(tool_name, prefix)
+    end)
+  end
+
+  defp build_google_workspace_callback(tool_name, token) do
+    fn args -> execute_google_workspace_tool(tool_name, args, token) end
+  end
+
+  defp execute_google_workspace_tool(tool_name, args, token) do
+    alias Autoforge.Google.{Gmail, Calendar, Drive, Directory}
+
+    result =
+      case tool_name do
+        # Gmail
+        "gmail_list_messages" ->
+          opts = []
+          opts = if args[:query], do: Keyword.put(opts, :q, args.query), else: opts
+
+          opts =
+            if args[:max_results],
+              do: Keyword.put(opts, :maxResults, args.max_results),
+              else: opts
+
+          Gmail.list_messages(token, opts)
+
+        "gmail_get_message" ->
+          Gmail.get_message(token, args.message_id, format: "full")
+
+        "gmail_send_message" ->
+          raw = build_rfc2822(args)
+          encoded = Base.url_encode64(raw, padding: false)
+          Gmail.send_message(token, encoded)
+
+        "gmail_modify_labels" ->
+          Gmail.modify_message(
+            token,
+            args.message_id,
+            args[:add_label_ids] || [],
+            args[:remove_label_ids] || []
+          )
+
+        "gmail_list_labels" ->
+          Gmail.list_labels(token)
+
+        # Calendar
+        "calendar_list_calendars" ->
+          Calendar.list_calendars(token)
+
+        "calendar_list_events" ->
+          cal_id = args[:calendar_id] || "primary"
+          opts = []
+          opts = if args[:time_min], do: Keyword.put(opts, :timeMin, args.time_min), else: opts
+          opts = if args[:time_max], do: Keyword.put(opts, :timeMax, args.time_max), else: opts
+
+          opts =
+            if args[:max_results],
+              do: Keyword.put(opts, :maxResults, args.max_results),
+              else: opts
+
+          Calendar.list_events(token, cal_id, opts)
+
+        "calendar_get_event" ->
+          cal_id = args[:calendar_id] || "primary"
+          Calendar.get_event(token, cal_id, args.event_id)
+
+        "calendar_create_event" ->
+          cal_id = args[:calendar_id] || "primary"
+          params = build_calendar_event_params(args)
+          Calendar.create_event(token, cal_id, params)
+
+        "calendar_update_event" ->
+          cal_id = args[:calendar_id] || "primary"
+          params = build_calendar_event_params(args)
+          Calendar.update_event(token, cal_id, args.event_id, params)
+
+        "calendar_delete_event" ->
+          cal_id = args[:calendar_id] || "primary"
+          Calendar.delete_event(token, cal_id, args.event_id)
+
+        "calendar_freebusy_query" ->
+          Calendar.freebusy_query(token, args.time_min, args.time_max, args.calendar_ids)
+
+        # Drive
+        "drive_list_files" ->
+          opts = []
+          opts = if args[:query], do: Keyword.put(opts, :q, args.query), else: opts
+          opts = if args[:page_size], do: Keyword.put(opts, :pageSize, args.page_size), else: opts
+          Drive.list_files(token, opts)
+
+        "drive_get_file" ->
+          Drive.get_file(token, args.file_id)
+
+        "drive_download_file" ->
+          Drive.download_file(token, args.file_id)
+
+        "drive_upload_file" ->
+          opts = if args[:parent_id], do: [parent_id: args.parent_id], else: []
+          Drive.upload_file(token, args.name, args.content, args.mime_type, opts)
+
+        "drive_update_file" ->
+          metadata = %{}
+          metadata = if args[:name], do: Map.put(metadata, "name", args.name), else: metadata
+
+          metadata =
+            if args[:add_parents],
+              do: Map.put(metadata, "addParents", args.add_parents),
+              else: metadata
+
+          metadata =
+            if args[:remove_parents],
+              do: Map.put(metadata, "removeParents", args.remove_parents),
+              else: metadata
+
+          Drive.update_file(token, args.file_id, metadata)
+
+        "drive_copy_file" ->
+          opts = []
+          opts = if args[:name], do: Keyword.put(opts, :name, args.name), else: opts
+
+          opts =
+            if args[:parent_id], do: Keyword.put(opts, :parent_id, args.parent_id), else: opts
+
+          Drive.copy_file(token, args.file_id, opts)
+
+        "drive_list_shared_drives" ->
+          Drive.list_shared_drives(token)
+
+        # Directory
+        "directory_list_users" ->
+          opts = []
+          opts = if args[:query], do: Keyword.put(opts, :query, args.query), else: opts
+
+          opts =
+            if args[:max_results],
+              do: Keyword.put(opts, :maxResults, args.max_results),
+              else: opts
+
+          Directory.list_users(token, args.domain, opts)
+
+        "directory_get_user" ->
+          Directory.get_user(token, args.user_key)
+
+        _ ->
+          {:error, "Unknown Google Workspace tool: #{tool_name}"}
+      end
+
+    case result do
+      {:ok, data} when is_map(data) or is_list(data) -> {:ok, Jason.encode!(data)}
+      {:ok, data} when is_binary(data) -> {:ok, data}
+      :ok -> {:ok, "Success"}
+      {:error, reason} -> {:error, to_string(reason)}
+    end
+  end
+
+  defp build_rfc2822(args) do
+    headers =
+      ["To: #{args.to}", "Subject: #{args.subject}", "Content-Type: text/plain; charset=UTF-8"]
+
+    headers = if args[:cc], do: headers ++ ["Cc: #{args.cc}"], else: headers
+    headers = if args[:bcc], do: headers ++ ["Bcc: #{args.bcc}"], else: headers
+
+    Enum.join(headers, "\r\n") <> "\r\n\r\n" <> args.body
+  end
+
+  defp build_calendar_event_params(args) do
+    params = %{}
+    params = if args[:summary], do: Map.put(params, "summary", args.summary), else: params
+
+    params =
+      if args[:description], do: Map.put(params, "description", args.description), else: params
+
+    params = if args[:location], do: Map.put(params, "location", args.location), else: params
+
+    params =
+      if args[:start_time],
+        do: Map.put(params, "start", %{"dateTime" => args.start_time}),
+        else: params
+
+    params =
+      if args[:end_time],
+        do: Map.put(params, "end", %{"dateTime" => args.end_time}),
+        else: params
+
+    params =
+      if args[:attendees] do
+        attendees = Enum.map(args.attendees, &%{"email" => &1})
+        Map.put(params, "attendees", attendees)
+      else
+        params
+      end
+
+    params
   end
 
   defp broadcast_thinking(conversation_id, bot_id, thinking?) do

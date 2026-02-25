@@ -12,6 +12,14 @@ defmodule Autoforge.Ai.Tool do
 
   actions do
     defaults [:read]
+
+    create :create do
+      accept [:name, :description, :config]
+    end
+
+    update :update do
+      accept [:name, :description, :config]
+    end
   end
 
   policies do
@@ -34,6 +42,11 @@ defmodule Autoforge.Ai.Tool do
     end
 
     attribute :description, :string do
+      allow_nil? true
+      public? true
+    end
+
+    attribute :config, Autoforge.Ai.ToolConfigs.ToolConfig do
       allow_nil? true
       public? true
     end

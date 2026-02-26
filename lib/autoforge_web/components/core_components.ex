@@ -28,6 +28,7 @@ defmodule AutoforgeWeb.CoreComponents do
   """
   use Phoenix.Component
   use Gettext, backend: AutoforgeWeb.Gettext
+  use Fluxon, only: [:button, :input]
 
   import Fluxon.Components.Alert
 
@@ -225,6 +226,80 @@ defmodule AutoforgeWeb.CoreComponents do
         {"transition-all ease-in duration-200", "opacity-100 translate-y-0 sm:scale-100",
          "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"}
     )
+  end
+
+  @doc """
+  Renders a search bar with a magnifying glass icon and debounced input.
+
+  ## Examples
+
+      <.search_bar query={@query} />
+      <.search_bar query={@query} placeholder="Search bots..." />
+  """
+  attr :query, :string, default: ""
+  attr :placeholder, :string, default: "Search..."
+
+  def search_bar(assigns) do
+    ~H"""
+    <.form for={%{}} phx-change="search" phx-submit="search" class="w-full max-w-sm">
+      <.input type="search" name="q" value={@query} placeholder={@placeholder} phx-debounce="300">
+        <:inner_prefix>
+          <.icon name="hero-magnifying-glass" class="w-4 h-4 text-base-content/40" />
+        </:inner_prefix>
+      </.input>
+    </.form>
+    """
+  end
+
+  @doc """
+  Renders offset pagination controls showing "Showing X–Y of Z" with prev/next buttons.
+
+  Expects an `%Ash.Page.Offset{}` struct as the `page` assign.
+
+  ## Examples
+
+      <.pagination page={@page} />
+  """
+  attr :page, :any, required: true
+
+  def pagination(assigns) do
+    assigns =
+      assigns
+      |> assign(:has_prev, AshPhoenix.LiveView.prev_page?(assigns.page))
+      |> assign(:has_next, AshPhoenix.LiveView.next_page?(assigns.page))
+      |> assign(:from, (assigns.page.offset || 0) + 1)
+      |> assign(
+        :to,
+        min((assigns.page.offset || 0) + length(assigns.page.results), assigns.page.count || 0)
+      )
+
+    ~H"""
+    <div :if={@page.count && @page.count > 0} class="flex items-center justify-between mt-6 text-sm">
+      <span class="text-base-content/60">
+        Showing {@from}–{@to} of {@page.count}
+      </span>
+      <div class="flex items-center gap-2">
+        <.button
+          size="sm"
+          variant="soft"
+          disabled={!@has_prev}
+          phx-click="paginate"
+          phx-value-direction="prev"
+        >
+          <.icon name="hero-chevron-left" class="w-4 h-4 mr-1" /> Prev
+        </.button>
+        <.button
+          size="sm"
+          variant="soft"
+          disabled={!@has_next}
+          phx-click="paginate"
+          phx-value-direction="next"
+        >
+          Next <.icon name="hero-chevron-right" class="w-4 h-4 ml-1" />
+        </.button>
+      </div>
+    </div>
+    """
   end
 
   @doc """

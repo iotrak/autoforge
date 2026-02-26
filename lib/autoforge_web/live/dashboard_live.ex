@@ -12,7 +12,7 @@ defmodule AutoforgeWeb.DashboardLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:dashboard}>
-      <div class="max-w-4xl mx-auto">
+      <div>
         <div class="mb-6">
           <h1 class="text-2xl font-bold tracking-tight">
             Welcome back, {@current_user.name || @current_user.email}

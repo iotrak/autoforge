@@ -175,7 +175,7 @@ defmodule AutoforgeWeb.ToolShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:tools}>
-      <div class="max-w-3xl mx-auto">
+      <div>
         <div class="mb-6">
           <.link
             navigate={~p"/tools"}

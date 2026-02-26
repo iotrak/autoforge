@@ -131,7 +131,9 @@ defmodule AutoforgeWeb.ProfileLive do
     case Autoforge.Accounts.ApiKey
          |> Ash.Changeset.for_create(
            :create,
-           %{user_id: user.id, label: label, expires_at: expires_at}, actor: user)
+           %{user_id: user.id, label: label, expires_at: expires_at},
+           actor: user
+         )
          |> Ash.create() do
       {:ok, api_key} ->
         plaintext = api_key.__metadata__.plaintext_api_key
@@ -192,7 +194,7 @@ defmodule AutoforgeWeb.ProfileLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:profile}>
-      <div class="max-w-2xl mx-auto">
+      <div>
         <div class="mb-6">
           <h1 class="text-2xl font-bold tracking-tight">Profile Settings</h1>
           <p class="mt-2 text-base-content/70">

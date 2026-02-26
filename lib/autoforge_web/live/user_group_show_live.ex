@@ -305,7 +305,7 @@ defmodule AutoforgeWeb.UserGroupShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:user_groups}>
-      <div class="max-w-3xl mx-auto">
+      <div>
         <div class="mb-6">
           <.link
             navigate={~p"/user-groups"}

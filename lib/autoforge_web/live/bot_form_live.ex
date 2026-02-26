@@ -132,7 +132,7 @@ defmodule AutoforgeWeb.BotFormLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:bots}>
-      <div class="max-w-2xl mx-auto">
+      <div>
         <div class="mb-6">
           <.link
             navigate={~p"/bots"}

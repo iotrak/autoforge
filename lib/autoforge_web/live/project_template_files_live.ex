@@ -215,7 +215,7 @@ defmodule AutoforgeWeb.ProjectTemplateFilesLive do
 
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:templates}>
-      <div class="max-w-6xl mx-auto">
+      <div>
         <div class="mb-6">
           <.link
             navigate={~p"/project-templates/#{@template.id}/edit"}

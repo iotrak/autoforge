@@ -52,6 +52,13 @@ defmodule Autoforge.Accounts.User do
   actions do
     defaults [:read]
 
+    read :search do
+      argument :query, :string, default: ""
+      argument :sort, :string, default: "email"
+      prepare {Autoforge.Preparations.Search, attributes: [:name, :email]}
+      pagination offset?: true, countable: :by_default, default_limit: 20
+    end
+
     read :sign_in_with_api_key do
       argument :api_key, :string, allow_nil?: false
       prepare AshAuthentication.Strategy.ApiKey.SignInPreparation

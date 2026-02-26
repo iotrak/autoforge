@@ -41,6 +41,14 @@ defmodule Autoforge.Projects.Project do
   actions do
     defaults [:read]
 
+    read :search do
+      argument :query, :string, default: ""
+      argument :sort, :string, default: "-inserted_at"
+      filter expr(state != :destroyed)
+      prepare {Autoforge.Preparations.Search, attributes: [:name]}
+      pagination offset?: true, countable: :by_default, default_limit: 20
+    end
+
     create :create do
       accept [:name, :project_template_id, :db_password, :github_repo_owner, :github_repo_name]
 

@@ -13,6 +13,13 @@ defmodule Autoforge.Chat.Conversation do
   actions do
     defaults [:read, :destroy]
 
+    read :search do
+      argument :query, :string, default: ""
+      argument :sort, :string, default: "-inserted_at"
+      prepare {Autoforge.Preparations.Search, attributes: [:subject]}
+      pagination offset?: true, countable: :by_default, default_limit: 20
+    end
+
     create :create do
       accept [:subject]
 

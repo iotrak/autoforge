@@ -192,7 +192,7 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
         <:content>
           <p class="text-xs">
             <span class="font-semibold text-base-content">{var}</span>
-            <span class="text-base-content/60"> —   {desc}</span>
+            <span class="text-base-content/60"> —     {desc}</span>
           </p>
           <p class="text-[10px] text-base-content/40 mt-1">Click to copy</p>
         </:content>
@@ -205,7 +205,7 @@ defmodule AutoforgeWeb.ProjectTemplateFormLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:templates}>
-      <div class="max-w-2xl mx-auto">
+      <div>
         <div class="mb-6">
           <.link
             navigate={~p"/project-templates"}

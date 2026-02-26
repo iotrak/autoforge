@@ -40,7 +40,7 @@ defmodule AutoforgeWeb.ModelsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:models}>
-      <div class="max-w-7xl mx-auto">
+      <div>
         <div class="mb-8">
           <h1 class="text-2xl font-bold tracking-tight">Models</h1>
           <p class="mt-2 text-base-content/70">

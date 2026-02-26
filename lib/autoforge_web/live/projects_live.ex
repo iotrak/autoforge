@@ -7,17 +7,20 @@ defmodule AutoforgeWeb.ProjectsLive do
 
   on_mount {AutoforgeWeb.LiveUserAuth, :live_user_required}
 
+  @limit 20
+
   @impl true
   def mount(_params, _session, socket) do
-    user = socket.assigns.current_user
-
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:updated")
     end
 
-    projects = load_projects(user)
+    {:ok, assign(socket, page_title: "Projects", query: "")}
+  end
 
-    {:ok, assign(socket, page_title: "Projects", projects: projects)}
+  @impl true
+  def handle_params(params, _url, socket) do
+    {:noreply, load_page(socket, params)}
   end
 
   @impl true
@@ -25,11 +28,33 @@ defmodule AutoforgeWeb.ProjectsLive do
         %Phoenix.Socket.Broadcast{payload: %Ash.Notifier.Notification{}},
         socket
       ) do
-    projects = load_projects(socket.assigns.current_user)
-    {:noreply, assign(socket, projects: projects)}
+    params = build_params(socket)
+    {:noreply, load_page(socket, params)}
   end
 
   @impl true
+  def handle_event("search", %{"q" => query}, socket) do
+    params = if query == "", do: %{}, else: %{"q" => query}
+    {:noreply, push_patch(socket, to: ~p"/projects?#{params}")}
+  end
+
+  def handle_event("paginate", %{"direction" => dir}, socket) do
+    page = socket.assigns.page
+
+    new_offset =
+      case dir do
+        "next" -> (page.offset || 0) + page.limit
+        "prev" -> max((page.offset || 0) - page.limit, 0)
+      end
+
+    params = %{"offset" => to_string(new_offset)}
+
+    params =
+      if socket.assigns.query != "", do: Map.put(params, "q", socket.assigns.query), else: params
+
+    {:noreply, push_patch(socket, to: ~p"/projects?#{params}")}
+  end
+
   def handle_event("stop", %{"id" => id}, socket) do
     project = find_project(socket, id)
 
@@ -66,16 +91,33 @@ defmodule AutoforgeWeb.ProjectsLive do
     {:noreply, socket}
   end
 
-  defp load_projects(user) do
-    Project
-    |> Ash.Query.filter(state != :destroyed)
-    |> Ash.Query.sort(inserted_at: :desc)
-    |> Ash.Query.load(:project_template)
-    |> Ash.read!(actor: user)
+  defp load_page(socket, params) do
+    query = params["q"] || ""
+
+    page_opts =
+      AshPhoenix.LiveView.params_to_page_opts(params, default_limit: @limit, count?: true)
+
+    page =
+      Project
+      |> Ash.Query.for_read(:search, %{query: query})
+      |> Ash.Query.load(:project_template)
+      |> Ash.read!(actor: socket.assigns.current_user, page: page_opts)
+
+    assign(socket, page: page, query: query)
+  end
+
+  defp build_params(socket) do
+    params = %{}
+
+    params =
+      if socket.assigns.query != "", do: Map.put(params, "q", socket.assigns.query), else: params
+
+    offset = socket.assigns.page.offset || 0
+    if offset > 0, do: Map.put(params, "offset", to_string(offset)), else: params
   end
 
   defp find_project(socket, id) do
-    Enum.find(socket.assigns.projects, &(&1.id == id))
+    Enum.find(socket.assigns.page.results, &(&1.id == id))
   end
 
   defp state_badge_class(state) do
@@ -95,7 +137,7 @@ defmodule AutoforgeWeb.ProjectsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:projects}>
-      <div class="max-w-4xl mx-auto">
+      <div>
         <div class="flex items-center justify-between mb-6">
           <div>
             <h1 class="text-2xl font-bold tracking-tight">Projects</h1>
@@ -110,7 +152,11 @@ defmodule AutoforgeWeb.ProjectsLive do
           </.link>
         </div>
 
-        <%= if @projects == [] do %>
+        <div class="mb-4">
+          <.search_bar query={@query} placeholder="Search projects..." />
+        </div>
+
+        <%= if @page.results == [] do %>
           <div class="card bg-base-200">
             <div class="card-body items-center text-center py-12">
               <.icon name="hero-cube-transparent" class="w-10 h-10 text-base-content/30 mb-2" />
@@ -135,7 +181,7 @@ defmodule AutoforgeWeb.ProjectsLive do
               <:col></:col>
             </.table_head>
             <.table_body>
-              <.table_row :for={project <- @projects}>
+              <.table_row :for={project <- @page.results}>
                 <:cell>
                   <.link navigate={~p"/projects/#{project.id}"} class="font-medium hover:underline">
                     {project.name}
@@ -197,6 +243,8 @@ defmodule AutoforgeWeb.ProjectsLive do
               </.table_row>
             </.table_body>
           </.table>
+
+          <.pagination page={@page} />
         <% end %>
       </div>
     </Layouts.app>

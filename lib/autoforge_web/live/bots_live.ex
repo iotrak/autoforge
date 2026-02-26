@@ -7,33 +7,71 @@ defmodule AutoforgeWeb.BotsLive do
 
   on_mount {AutoforgeWeb.LiveUserAuth, :live_user_required}
 
+  @limit 20
+
   @impl true
   def mount(_params, _session, socket) do
-    user = socket.assigns.current_user
-
-    bots =
-      Bot
-      |> Ash.Query.sort(inserted_at: :desc)
-      |> Ash.read!(actor: user)
-
-    {:ok, assign(socket, page_title: "Bots", bots: bots)}
+    {:ok, assign(socket, page_title: "Bots", query: "")}
   end
 
   @impl true
+  def handle_params(params, _url, socket) do
+    query = params["q"] || ""
+
+    page_opts =
+      AshPhoenix.LiveView.params_to_page_opts(params, default_limit: @limit, count?: true)
+
+    page =
+      Bot
+      |> Ash.Query.for_read(:search, %{query: query})
+      |> Ash.read!(actor: socket.assigns.current_user, page: page_opts)
+
+    {:noreply, assign(socket, page: page, query: query)}
+  end
+
+  @impl true
+  def handle_event("search", %{"q" => query}, socket) do
+    params = if query == "", do: %{}, else: %{"q" => query}
+    {:noreply, push_patch(socket, to: ~p"/bots?#{params}")}
+  end
+
+  def handle_event("paginate", %{"direction" => dir}, socket) do
+    page = socket.assigns.page
+
+    new_offset =
+      case dir do
+        "next" -> (page.offset || 0) + page.limit
+        "prev" -> max((page.offset || 0) - page.limit, 0)
+      end
+
+    params = %{"offset" => to_string(new_offset)}
+
+    params =
+      if socket.assigns.query != "", do: Map.put(params, "q", socket.assigns.query), else: params
+
+    {:noreply, push_patch(socket, to: ~p"/bots?#{params}")}
+  end
+
   def handle_event("delete", %{"id" => id}, socket) do
     user = socket.assigns.current_user
-    bot = Enum.find(socket.assigns.bots, &(&1.id == id))
+    bot = Enum.find(socket.assigns.page.results, &(&1.id == id))
 
     if bot do
       Ash.destroy!(bot, actor: user)
     end
 
-    bots =
-      Bot
-      |> Ash.Query.sort(inserted_at: :desc)
-      |> Ash.read!(actor: user)
+    {:noreply, push_patch(socket, to: current_path(socket))}
+  end
 
-    {:noreply, assign(socket, bots: bots)}
+  defp current_path(socket) do
+    params = %{}
+
+    params =
+      if socket.assigns.query != "", do: Map.put(params, "q", socket.assigns.query), else: params
+
+    offset = socket.assigns.page.offset || 0
+    params = if offset > 0, do: Map.put(params, "offset", to_string(offset)), else: params
+    ~p"/bots?#{params}"
   end
 
   defp format_model(model_string) do
@@ -62,7 +100,7 @@ defmodule AutoforgeWeb.BotsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} active_page={:bots}>
-      <div class="max-w-4xl mx-auto">
+      <div>
         <div class="flex items-center justify-between mb-6">
           <div>
             <h1 class="text-2xl font-bold tracking-tight">Bots</h1>
@@ -77,7 +115,11 @@ defmodule AutoforgeWeb.BotsLive do
           </.link>
         </div>
 
-        <%= if @bots == [] do %>
+        <div class="mb-4">
+          <.search_bar query={@query} placeholder="Search bots..." />
+        </div>
+
+        <%= if @page.results == [] do %>
           <div class="card bg-base-200">
             <div class="card-body items-center text-center py-12">
               <.icon name="hero-cpu-chip" class="w-10 h-10 text-base-content/30 mb-2" />
@@ -102,7 +144,7 @@ defmodule AutoforgeWeb.BotsLive do
               <:col></:col>
             </.table_head>
             <.table_body>
-              <.table_row :for={bot <- @bots}>
+              <.table_row :for={bot <- @page.results}>
                 <:cell>
                   <.link navigate={~p"/bots/#{bot.id}"} class="font-medium hover:underline">
                     {bot.name}
@@ -151,6 +193,8 @@ defmodule AutoforgeWeb.BotsLive do
               </.table_row>
             </.table_body>
           </.table>
+
+          <.pagination page={@page} />
         <% end %>
       </div>
     </Layouts.app>

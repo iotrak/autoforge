@@ -13,6 +13,13 @@ defmodule Autoforge.Accounts.UserGroup do
   actions do
     defaults [:read, :destroy]
 
+    read :search do
+      argument :query, :string, default: ""
+      argument :sort, :string, default: "name"
+      prepare {Autoforge.Preparations.Search, attributes: [:name, :description]}
+      pagination offset?: true, countable: :by_default, default_limit: 20
+    end
+
     create :create do
       accept [:name, :description]
     end

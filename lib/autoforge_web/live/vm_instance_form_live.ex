@@ -13,8 +13,8 @@ defmodule AutoforgeWeb.VmInstanceFormLive do
 
     templates =
       VmTemplate
-      |> Ash.Query.for_read(:search, %{query: ""})
-      |> Ash.read!(actor: user, page: false)
+      |> Ash.Query.sort(name: :asc)
+      |> Ash.read!(actor: user)
 
     template_options =
       Enum.map(templates, fn t ->

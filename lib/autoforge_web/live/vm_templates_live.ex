@@ -157,7 +157,12 @@ defmodule AutoforgeWeb.VmTemplatesLive do
             <.table_body>
               <.table_row :for={template <- @page.results}>
                 <:cell>
-                  <span class="font-medium">{template.name}</span>
+                  <.link
+                    navigate={~p"/vm-templates/#{template.id}/edit"}
+                    class="font-medium hover:text-primary transition-colors"
+                  >
+                    {template.name}
+                  </.link>
                   <span
                     :if={template.description}
                     class="block text-xs text-base-content/50 truncate max-w-xs"

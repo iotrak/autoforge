@@ -64,11 +64,16 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
           current_zone: current_zone,
           # Loading states
           region_options: nil,
+          region_base_options: nil,
           zone_options: nil,
+          zone_base_options: nil,
           machine_type_options: nil,
+          machine_type_base_options: nil,
           disk_type_options: nil,
+          disk_type_base_options: nil,
           all_disk_type_options: nil,
           os_image_options: nil,
+          os_image_base_options: nil,
           all_os_images: [],
           selected_arch: "X86_64",
           loading_images: true,
@@ -183,7 +188,9 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
           socket
           |> assign(
             region_options: region_options,
+            region_base_options: region_options,
             zone_options: zone_options,
+            zone_base_options: zone_options,
             regions_to_zones: regions_to_zones,
             loading_regions: false,
             loading_zones: false,
@@ -264,9 +271,11 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
      socket
      |> assign(
        machine_type_options: machine_type_options,
+       machine_type_base_options: machine_type_options,
        machine_type_specs: machine_type_specs,
        all_disk_type_options: disk_type_options,
        disk_type_options: filtered_disk_types,
+       disk_type_base_options: filtered_disk_types,
        loading_machine_types: false,
        loading_disk_types: false
      )
@@ -305,8 +314,7 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
             label: "#{label} - #{family}",
             value: "projects/#{project}/global/images/family/#{family}",
             arch: latest["architecture"] || "X86_64",
-            project: project,
-            created_at: latest["creationTimestamp"]
+            project: project
           }
         end)
       end)
@@ -320,10 +328,21 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
 
     latest_values =
       all_images
-      |> Enum.group_by(fn img -> {img.project, img.arch} end)
+      |> Enum.group_by(fn img ->
+        family = image_family_from_value(img.value)
+        {img.project, img.arch, image_family_base(family)}
+      end)
       |> Enum.flat_map(fn {_key, imgs} ->
-        newest = Enum.max_by(imgs, & &1.created_at)
-        [newest.value]
+        if length(imgs) > 1 do
+          newest =
+            Enum.max_by(imgs, fn img ->
+              img.value |> image_family_from_value() |> natural_sort_key()
+            end)
+
+          [newest.value]
+        else
+          []
+        end
       end)
       |> MapSet.new()
 
@@ -342,6 +361,7 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
      assign(socket,
        all_os_images: all_images,
        os_image_options: options,
+       os_image_base_options: options,
        selected_arch: selected_arch,
        loading_images: false,
        premium_image_values: premium_values,
@@ -506,6 +526,33 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
     end
   end
 
+  defp image_family_from_value(value) do
+    value |> String.split("/") |> List.last()
+  end
+
+  # Strips version numbers and arch suffixes to get the product line base name.
+  # e.g. "ubuntu-pro-2404-lts-amd64" -> "ubuntu-pro-lts"
+  #      "debian-12"                  -> "debian"
+  defp image_family_base(family) do
+    family
+    |> String.replace(~r/-(amd64|arm64|x86-64)$/, "")
+    |> String.replace(~r/\d+/, "")
+    |> String.replace(~r/-+/, "-")
+    |> String.trim("-")
+  end
+
+  # Natural sort key — splits a string into text/number segments so that
+  # "9" sorts before "10" and "2204" before "2404".
+  defp natural_sort_key(string) do
+    Regex.split(~r/(\d+)/, string, include_captures: true)
+    |> Enum.map(fn part ->
+      case Integer.parse(part) do
+        {n, ""} -> {1, n, ""}
+        _ -> {0, 0, part}
+      end
+    end)
+  end
+
   defp image_license_key(os_image) when is_binary(os_image) do
     cond do
       String.contains?(os_image, "ubuntu-os-pro-cloud") -> "ubuntu-pro"
@@ -573,7 +620,34 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
   @impl true
   def handle_event("set_arch", %{"arch" => arch}, socket) do
     options = filter_images_by_arch(socket.assigns.all_os_images, arch)
-    {:noreply, assign(socket, selected_arch: arch, os_image_options: options)}
+
+    {:noreply,
+     assign(socket,
+       selected_arch: arch,
+       os_image_options: options,
+       os_image_base_options: options
+     )}
+  end
+
+  def handle_event("search_machine_types", %{"query" => q}, socket) do
+    {:noreply,
+     search_field(socket, q, :machine_type, :machine_type_base_options, :machine_type_options)}
+  end
+
+  def handle_event("search_disk_types", %{"query" => q}, socket) do
+    {:noreply, search_field(socket, q, :disk_type, :disk_type_base_options, :disk_type_options)}
+  end
+
+  def handle_event("search_os_images", %{"query" => q}, socket) do
+    {:noreply, search_field(socket, q, :os_image, :os_image_base_options, :os_image_options)}
+  end
+
+  def handle_event("search_regions", %{"query" => q}, socket) do
+    {:noreply, search_field(socket, q, :region, :region_base_options, :region_options)}
+  end
+
+  def handle_event("search_zones", %{"query" => q}, socket) do
+    {:noreply, search_field(socket, q, :zone, :zone_base_options, :zone_options)}
   end
 
   def handle_event("validate", %{"form" => params}, socket) do
@@ -599,6 +673,7 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
             socket
             |> assign(
               zone_options: zone_options,
+              zone_base_options: zone_options,
               current_region: new_region,
               current_zone: resolved_zone
             )
@@ -632,7 +707,11 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
 
     {:noreply,
      socket
-     |> assign(form: form, disk_type_options: disk_type_options)
+     |> assign(
+       form: form,
+       disk_type_options: disk_type_options,
+       disk_type_base_options: disk_type_options
+     )
      |> recalculate_price_estimate(params)}
   end
 
@@ -648,6 +727,30 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
 
       {:error, form} ->
         {:noreply, assign(socket, form: to_form(form))}
+    end
+  end
+
+  defp search_field(socket, query, field, base_key, options_key) do
+    current_value = AshPhoenix.Form.value(socket.assigns.form.source, field)
+    base = Map.get(socket.assigns, base_key)
+    filtered = fuzzy_filter_options(base, query, current_value)
+    assign(socket, [{options_key, filtered}])
+  end
+
+  defp fuzzy_filter_options(nil, _query, _current_value), do: nil
+
+  defp fuzzy_filter_options(options, query, current_value) do
+    query = String.trim(query)
+
+    if query == "" do
+      options
+    else
+      tokens = query |> String.downcase() |> String.split(~r/\s+/, trim: true)
+
+      Enum.filter(options, fn {label, value} ->
+        value == current_value or
+          Enum.all?(tokens, fn token -> String.contains?(String.downcase(label), token) end)
+      end)
     end
   end
 
@@ -723,6 +826,7 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
                   loading={@loading_machine_types}
                   searchable
                   search_input_placeholder="Search machine types..."
+                  on_search="search_machine_types"
                 />
 
                 <.os_image_select
@@ -749,6 +853,9 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
                   placeholder="Select a disk type..."
                   options={@disk_type_options}
                   loading={@loading_disk_types}
+                  searchable
+                  search_input_placeholder="Search disk types..."
+                  on_search="search_disk_types"
                 />
               </div>
 
@@ -761,6 +868,7 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
                   loading={@loading_regions}
                   searchable
                   search_input_placeholder="Search regions..."
+                  on_search="search_regions"
                 />
 
                 <.async_select
@@ -771,6 +879,7 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
                   loading={@loading_zones}
                   searchable
                   search_input_placeholder="Search zones..."
+                  on_search="search_zones"
                 />
               </div>
 
@@ -836,9 +945,14 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
         options={@options}
         searchable
         search_input_placeholder="Search OS images..."
+        on_search="search_os_images"
       >
         <:option :let={{label, value}}>
-          <div class="flex items-center justify-between gap-2 px-3 py-1.5">
+          <div class={[
+            "flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg",
+            "in-data-highlighted:bg-base-200",
+            "in-data-selected:bg-primary/10 in-data-selected:font-medium"
+          ]}>
             <span class="truncate">{label}</span>
             <div class="flex items-center gap-1 shrink-0">
               <span
@@ -893,6 +1007,13 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
   end
 
   defp async_select(assigns) do
+    extra =
+      if assigns[:on_search],
+        do: %{on_search: assigns[:on_search]},
+        else: %{}
+
+    assigns = assign(assigns, :extra, extra)
+
     ~H"""
     <.select
       field={@field}
@@ -901,6 +1022,7 @@ defmodule AutoforgeWeb.VmTemplateFormLive do
       options={@options}
       searchable={assigns[:searchable] || false}
       search_input_placeholder={assigns[:search_input_placeholder] || ""}
+      {@extra}
     />
     """
   end

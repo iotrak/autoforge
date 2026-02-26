@@ -66,6 +66,9 @@ jobs:
         run: |
           mix local.hex --force
           mix local.rebar --force
+          mix hex.repo add fluxon https://repo.fluxonui.com \
+            --fetch-public-key "${{ secrets.FLUXON_KEY_FINGERPRINT }}" \
+            --auth-key "${{ secrets.FLUXON_LICENSE_KEY }}"
           mix deps.get --only prod
 
       - name: Compile deps

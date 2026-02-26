@@ -30,7 +30,7 @@ defmodule AutoforgeWeb.TerminalChannel do
         {:ok, terminal_pid} =
           Terminal.start_link(project: project, user: user, channel_pid: self())
 
-        {:ok, assign(socket, :terminal_pid, terminal_pid)}
+        {:ok, socket |> assign(:terminal_pid, terminal_pid) |> assign(:utf8_buffer, "")}
     end
   end
 
@@ -47,8 +47,21 @@ defmodule AutoforgeWeb.TerminalChannel do
 
   @impl true
   def handle_info({:terminal_output, data}, socket) do
-    push(socket, "output", %{data: data})
-    {:noreply, socket}
+    combined = socket.assigns.utf8_buffer <> data
+
+    case :unicode.characters_to_binary(combined) do
+      valid when is_binary(valid) ->
+        push(socket, "output", %{data: valid})
+        {:noreply, assign(socket, :utf8_buffer, "")}
+
+      {:incomplete, valid, rest} ->
+        if byte_size(valid) > 0, do: push(socket, "output", %{data: valid})
+        {:noreply, assign(socket, :utf8_buffer, IO.iodata_to_binary(rest))}
+
+      {:error, valid, _bad} ->
+        if byte_size(valid) > 0, do: push(socket, "output", %{data: valid})
+        {:noreply, assign(socket, :utf8_buffer, "")}
+    end
   end
 
   def handle_info(:terminal_closed, socket) do

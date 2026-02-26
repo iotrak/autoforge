@@ -76,6 +76,19 @@ defmodule AutoforgeWeb.GoogleServiceAccountComponent do
     {:noreply, socket}
   end
 
+  def handle_event("set_default_compute", %{"id" => id}, socket) do
+    config = Enum.find(socket.assigns.configs, &(&1.id == id))
+
+    if config do
+      Ash.update!(config, %{default_compute: true},
+        action: :update,
+        actor: socket.assigns.current_user
+      )
+    end
+
+    {:noreply, load_configs(socket)}
+  end
+
   def handle_event("cancel", _params, socket) do
     {:noreply, assign(socket, form: nil, editing_config: nil)}
   end
@@ -162,6 +175,9 @@ defmodule AutoforgeWeb.GoogleServiceAccountComponent do
                   <span class={"badge badge-sm #{if config.enabled, do: "badge-success", else: "badge-warning"}"}>
                     {if config.enabled, do: "Enabled", else: "Disabled"}
                   </span>
+                  <span :if={config.default_compute} class="badge badge-sm badge-primary">
+                    Default Compute
+                  </span>
                 </div>
                 <.dropdown placement="bottom-end">
                   <:toggle>
@@ -171,6 +187,14 @@ defmodule AutoforgeWeb.GoogleServiceAccountComponent do
                   </:toggle>
                   <.dropdown_button phx-click="edit" phx-value-id={config.id} phx-target={@myself}>
                     <.icon name="hero-pencil-square" class="w-4 h-4 mr-2" /> Edit
+                  </.dropdown_button>
+                  <.dropdown_button
+                    :if={!config.default_compute}
+                    phx-click="set_default_compute"
+                    phx-value-id={config.id}
+                    phx-target={@myself}
+                  >
+                    <.icon name="hero-server" class="w-4 h-4 mr-2" /> Set as Default Compute
                   </.dropdown_button>
                   <.dropdown_separator />
                   <.dropdown_button

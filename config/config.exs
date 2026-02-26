@@ -14,7 +14,7 @@ config :ash_oban, pro?: false
 config :autoforge, Oban,
   engine: Oban.Engines.Basic,
   notifier: Oban.Notifiers.Postgres,
-  queues: [default: 10, ai: 5, sandbox: 3, github: 3],
+  queues: [default: 10, ai: 5, sandbox: 3, github: 3, deployments: 3],
   repo: Autoforge.Repo,
   plugins: [
     {Oban.Plugins.Cron,
@@ -75,6 +75,7 @@ config :autoforge,
     Autoforge.Ai,
     Autoforge.Chat,
     Autoforge.Config,
+    Autoforge.Deployments,
     Autoforge.Projects
   ],
   ash_authentication: [return_error_on_invalid_magic_link_token?: true]

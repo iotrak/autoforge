@@ -105,6 +105,24 @@ defmodule AutoforgeWeb.Layouts do
             href={~p"/project-templates"}
             active={@active_page == :templates}
           />
+
+          <div class="w-6 border-t border-base-300 my-1" />
+
+          <.sidebar_nav_item
+            icon="hero-server"
+            label="VMs"
+            href={~p"/vm-instances"}
+            active={@active_page == :vm_instances}
+          />
+          <.sidebar_nav_item
+            icon="hero-square-3-stack-3d"
+            label="VM Templates"
+            href={~p"/vm-templates"}
+            active={@active_page == :vm_templates}
+          />
+
+          <div class="w-6 border-t border-base-300 my-1" />
+
           <.sidebar_nav_item
             icon="hero-cog-6-tooth"
             label="Settings"

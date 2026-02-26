@@ -21,14 +21,16 @@ defmodule Autoforge.Config.GoogleServiceAccountConfig do
     defaults [:read, :destroy]
 
     create :create do
-      accept [:label, :service_account_json, :enabled]
+      accept [:label, :service_account_json, :enabled, :default_compute]
       change {__MODULE__.ParseServiceAccountJson, []}
+      change {__MODULE__.EnsureSingleDefault, []}
     end
 
     update :update do
-      accept [:label, :service_account_json, :enabled]
+      accept [:label, :service_account_json, :enabled, :default_compute]
       require_atomic? false
       change {__MODULE__.ParseServiceAccountJson, []}
+      change {__MODULE__.EnsureSingleDefault, []}
     end
   end
 
@@ -68,8 +70,35 @@ defmodule Autoforge.Config.GoogleServiceAccountConfig do
       default true
     end
 
+    attribute :default_compute, :boolean do
+      allow_nil? false
+      public? true
+      default false
+    end
+
     create_timestamp :inserted_at
     update_timestamp :updated_at
+  end
+
+  defmodule EnsureSingleDefault do
+    @moduledoc false
+    use Ash.Resource.Change
+
+    @impl true
+    def change(changeset, _opts, _context) do
+      Ash.Changeset.after_action(changeset, fn _changeset, record ->
+        if record.default_compute do
+          Autoforge.Config.GoogleServiceAccountConfig
+          |> Ash.Query.filter(id != ^record.id and default_compute == true)
+          |> Ash.bulk_update(:update, %{default_compute: false},
+            authorize?: false,
+            return_errors?: true
+          )
+        end
+
+        {:ok, record}
+      end)
+    end
   end
 
   defmodule ParseServiceAccountJson do

@@ -65,6 +65,12 @@ defmodule AutoforgeWeb.Router do
       live "/conversations", ConversationsLive
       live "/conversations/new", ConversationFormLive
       live "/conversations/:id", ConversationLive
+      live "/vm-templates", VmTemplatesLive
+      live "/vm-templates/new", VmTemplateFormLive, :new
+      live "/vm-templates/:id/edit", VmTemplateFormLive, :edit
+      live "/vm-instances", VmInstancesLive
+      live "/vm-instances/new", VmInstanceFormLive
+      live "/vm-instances/:id", VmInstanceLive
     end
   end
 

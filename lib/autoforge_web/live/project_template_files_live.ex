@@ -1,7 +1,7 @@
 defmodule AutoforgeWeb.ProjectTemplateFilesLive do
   use AutoforgeWeb, :live_view
 
-  alias Autoforge.Projects.{ProjectTemplate, ProjectTemplateFile}
+  alias Autoforge.Projects.{ProjectTemplate, ProjectTemplateFile, TemplatePusher}
 
   require Ash.Query
 
@@ -17,6 +17,13 @@ defmodule AutoforgeWeb.ProjectTemplateFilesLive do
       |> Ash.read_one!(actor: user)
 
     if template do
+      if connected?(socket) do
+        Phoenix.PubSub.subscribe(
+          Autoforge.PubSub,
+          "template:push_complete:#{template.id}"
+        )
+      end
+
       files = load_files(template_id, user)
 
       {:ok,
@@ -26,7 +33,10 @@ defmodule AutoforgeWeb.ProjectTemplateFilesLive do
          files: files,
          selected_file: nil,
          file_form: nil,
-         renaming_id: nil
+         renaming_id: nil,
+         pushing: false,
+         push_total: 0,
+         push_done: 0
        )}
     else
       {:ok,
@@ -187,11 +197,79 @@ defmodule AutoforgeWeb.ProjectTemplateFilesLive do
     end
   end
 
+  def handle_event("push_file_to_projects", %{"id" => id}, socket) do
+    template = socket.assigns.template
+    files = socket.assigns.files
+    file = Enum.find(files, &(&1.id == id))
+
+    file_ids =
+      if file && file.is_directory do
+        collect_descendant_ids(id, files)
+      else
+        [id]
+      end
+
+    case TemplatePusher.push_to_all_projects(template, file_ids: file_ids) do
+      {:ok, %{project_count: 0}} ->
+        {:noreply, put_flash(socket, :info, "No running or stopped projects use this template.")}
+
+      {:ok, %{project_count: count}} ->
+        name = if file, do: file.name, else: "file"
+
+        {:noreply,
+         socket
+         |> assign(pushing: true, push_total: count, push_done: 0)
+         |> put_flash(:info, "Pushing \"#{name}\" to #{count} project(s)...")}
+    end
+  end
+
+  def handle_event("push_to_projects", _params, socket) do
+    template = socket.assigns.template
+
+    case TemplatePusher.push_to_all_projects(template) do
+      {:ok, %{project_count: 0}} ->
+        {:noreply, put_flash(socket, :info, "No running or stopped projects use this template.")}
+
+      {:ok, %{project_count: count}} ->
+        {:noreply,
+         socket
+         |> assign(pushing: true, push_total: count, push_done: 0)
+         |> put_flash(:info, "Pushing template files to #{count} project(s)...")}
+    end
+  end
+
+  @impl true
+  def handle_info({:template_push_complete, _project_id, _message}, socket) do
+    done = socket.assigns.push_done + 1
+    total = socket.assigns.push_total
+
+    if done >= total do
+      {:noreply,
+       socket
+       |> assign(pushing: false, push_done: done)
+       |> put_flash(:info, "Template files pushed to #{total} project(s).")}
+    else
+      {:noreply, assign(socket, push_done: done)}
+    end
+  end
+
   defp load_files(template_id, user) do
     ProjectTemplateFile
     |> Ash.Query.filter(project_template_id == ^template_id)
     |> Ash.Query.sort(is_directory: :desc, sort_order: :asc, name: :asc)
     |> Ash.read!(actor: user)
+  end
+
+  defp collect_descendant_ids(parent_id, all_files) do
+    children = Enum.filter(all_files, &(&1.parent_id == parent_id))
+
+    Enum.flat_map(children, fn child ->
+      if child.is_directory do
+        collect_descendant_ids(child.id, all_files)
+      else
+        [child.id]
+      end
+    end)
   end
 
   defp build_tree(files) do
@@ -224,9 +302,21 @@ defmodule AutoforgeWeb.ProjectTemplateFilesLive do
             <.icon name="hero-arrow-left" class="w-4 h-4 inline-block mr-1" /> Back to Template
           </.link>
           <h1 class="text-2xl font-bold tracking-tight mt-2">{@template.name} — Files</h1>
-          <p class="mt-2 text-base-content/70">
-            Manage the template file tree. Files support Liquid template syntax.
-          </p>
+          <div class="mt-3 flex items-center gap-3">
+            <p class="text-base-content/70">
+              Manage the template file tree. Files support Liquid template syntax.
+            </p>
+            <.button
+              variant="outline"
+              size="sm"
+              phx-click="push_to_projects"
+              data-confirm="Push template files to all running and stopped projects using this template?"
+              disabled={@pushing}
+            >
+              <.icon name="hero-arrow-up-tray" class="w-4 h-4 mr-1" />
+              {if @pushing, do: "Pushing...", else: "Push to Projects"}
+            </.button>
+          </div>
         </div>
 
         <div class="flex gap-4 h-[calc(100vh-220px)]">
@@ -391,6 +481,14 @@ defmodule AutoforgeWeb.ProjectTemplateFilesLive do
             </.dropdown_button>
             <.dropdown_button phx-click="start_rename" phx-value-id={@node.file.id}>
               <.icon name="hero-pencil-square" class="w-4 h-4 mr-2" /> Rename
+            </.dropdown_button>
+            <.dropdown_separator />
+            <.dropdown_button
+              phx-click="push_file_to_projects"
+              phx-value-id={@node.file.id}
+              data-confirm={"Push \"#{@node.file.name}\" to all projects using this template?"}
+            >
+              <.icon name="hero-arrow-up-tray" class="w-4 h-4 mr-2" /> Push to Projects
             </.dropdown_button>
             <.dropdown_separator />
             <.dropdown_button

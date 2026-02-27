@@ -1,7 +1,7 @@
 defmodule AutoforgeWeb.ProjectLive do
   use AutoforgeWeb, :live_view
 
-  alias Autoforge.Projects.{CodeServer, DevServer, Project, Sandbox}
+  alias Autoforge.Projects.{CodeServer, DevServer, Project, Sandbox, TemplatePusher}
 
   require Ash.Query
 
@@ -23,6 +23,7 @@ defmodule AutoforgeWeb.ProjectLive do
         Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:provision_log:#{project.id}")
         Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:dev_server:#{project.id}")
         Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:code_server:#{project.id}")
+        Phoenix.PubSub.subscribe(Autoforge.PubSub, "project:template_push:#{project.id}")
       end
 
       token = Phoenix.Token.sign(AutoforgeWeb.Endpoint, "user_socket", user.id)
@@ -119,6 +120,10 @@ defmodule AutoforgeWeb.ProjectLive do
     {:noreply, assign(socket, code_server_running: false, code_server_ready: false)}
   end
 
+  def handle_info({:template_push, message}, socket) do
+    {:noreply, put_flash(socket, :info, message)}
+  end
+
   @impl true
   def handle_event("new_terminal", _params, socket) do
     counter = socket.assigns.terminal_counter + 1
@@ -184,6 +189,16 @@ defmodule AutoforgeWeb.ProjectLive do
      socket
      |> put_flash(:info, "Destroying project...")
      |> push_navigate(to: ~p"/projects")}
+  end
+
+  def handle_event("sync_template", _params, socket) do
+    project = socket.assigns.project
+
+    Task.Supervisor.start_child(Autoforge.TaskSupervisor, fn ->
+      TemplatePusher.push_to_project(project)
+    end)
+
+    {:noreply, put_flash(socket, :info, "Syncing template files...")}
   end
 
   def handle_event("start_dev_server", _params, socket) do
@@ -370,6 +385,14 @@ defmodule AutoforgeWeb.ProjectLive do
               <.dropdown_link navigate={~p"/projects/#{@project.id}/settings"}>
                 <.icon name="hero-cog-6-tooth" class="icon w-4 h-4" /> Settings
               </.dropdown_link>
+
+              <.dropdown_button
+                :if={@project.state in [:running, :stopped]}
+                phx-click="sync_template"
+                data-confirm="Re-sync template files to this project's container?"
+              >
+                <.icon name="hero-arrow-path" class="icon w-4 h-4" /> Sync Template Files
+              </.dropdown_button>
 
               <.dropdown_separator :if={
                 @project.state == :running && has_dev_server_script?(@project)

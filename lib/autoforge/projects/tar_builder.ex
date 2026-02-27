@@ -58,13 +58,13 @@ defmodule Autoforge.Projects.TarBuilder do
   Accepts all files for a template (flat list from DB), organizes the tree
   by parent_id, renders content, and creates the tar.
   """
-  def build_from_template_files(all_files, variables) do
+  def build_from_template_files(all_files, variables, only_ids \\ nil) do
     root_files = Enum.filter(all_files, fn f -> is_nil(f.parent_id) end)
-    entries = flatten_tree_from_all(root_files, all_files, variables, "")
+    entries = flatten_tree_from_all(root_files, all_files, variables, "", only_ids)
     build(entries)
   end
 
-  defp flatten_tree_from_all(files, all_files, variables, base_path) do
+  defp flatten_tree_from_all(files, all_files, variables, base_path, only_ids) do
     files
     |> Enum.sort_by(fn f -> {!f.is_directory, f.sort_order, f.name} end)
     |> Enum.flat_map(fn file ->
@@ -72,15 +72,19 @@ defmodule Autoforge.Projects.TarBuilder do
 
       if file.is_directory do
         children = Enum.filter(all_files, fn f -> f.parent_id == file.id end)
-        flatten_tree_from_all(children, all_files, variables, path)
+        flatten_tree_from_all(children, all_files, variables, path, only_ids)
       else
-        content =
-          case TemplateRenderer.render_file(file.content || "", variables) do
-            {:ok, rendered} -> rendered
-            _ -> file.content || ""
-          end
+        if is_nil(only_ids) or file.id in only_ids do
+          content =
+            case TemplateRenderer.render_file(file.content || "", variables) do
+              {:ok, rendered} -> rendered
+              _ -> file.content || ""
+            end
 
-        [%{path: path, content: content}]
+          [%{path: path, content: content}]
+        else
+          []
+        end
       end
     end)
   end

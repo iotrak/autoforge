@@ -138,6 +138,111 @@ defmodule Autoforge.Google.ComputeEngine do
     end
   end
 
+  # ── Addresses ─────────────────────────────────────────────────────────────
+
+  @doc """
+  Reserves a static external IP address in the given region.
+  """
+  def reserve_address(token, project_id, region, name) do
+    gce_req(
+      token,
+      :post,
+      "/compute/v1/projects/#{project_id}/regions/#{region}/addresses",
+      json: %{"name" => name, "addressType" => "EXTERNAL"}
+    )
+  end
+
+  @doc """
+  Gets the details of a reserved address, including its IP.
+  """
+  def get_address(token, project_id, region, name) do
+    gce_req(
+      token,
+      :get,
+      "/compute/v1/projects/#{project_id}/regions/#{region}/addresses/#{name}"
+    )
+  end
+
+  @doc """
+  Releases (deletes) a reserved static IP address.
+  """
+  def release_address(token, project_id, region, name) do
+    gce_req(
+      token,
+      :delete,
+      "/compute/v1/projects/#{project_id}/regions/#{region}/addresses/#{name}"
+    )
+  end
+
+  @doc """
+  Waits for a regional operation to complete.
+  """
+  def wait_for_region_operation(token, project_id, region, operation_name, opts \\ []) do
+    max_attempts = Keyword.get(opts, :max_attempts, 60)
+    delay_ms = Keyword.get(opts, :delay_ms, 5_000)
+
+    do_wait_for_region_operation(
+      token,
+      project_id,
+      region,
+      operation_name,
+      max_attempts,
+      delay_ms,
+      1
+    )
+  end
+
+  defp do_wait_for_region_operation(
+         _token,
+         _project_id,
+         _region,
+         operation_name,
+         max_attempts,
+         _delay_ms,
+         attempt
+       )
+       when attempt > max_attempts do
+    {:error, "Operation #{operation_name} timed out after #{max_attempts} attempts"}
+  end
+
+  defp do_wait_for_region_operation(
+         token,
+         project_id,
+         region,
+         operation_name,
+         max_attempts,
+         delay_ms,
+         attempt
+       ) do
+    case gce_req(
+           token,
+           :get,
+           "/compute/v1/projects/#{project_id}/regions/#{region}/operations/#{operation_name}"
+         ) do
+      {:ok, %{"status" => "DONE", "error" => %{"errors" => errors}}} when errors != [] ->
+        {:error, "Operation failed: #{inspect(errors)}"}
+
+      {:ok, %{"status" => "DONE"} = op} ->
+        {:ok, op}
+
+      {:ok, _op} ->
+        Process.sleep(delay_ms)
+
+        do_wait_for_region_operation(
+          token,
+          project_id,
+          region,
+          operation_name,
+          max_attempts,
+          delay_ms,
+          attempt + 1
+        )
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   # ── Instances ──────────────────────────────────────────────────────────────
 
   @doc """
@@ -252,7 +357,10 @@ defmodule Autoforge.Google.ComputeEngine do
 
   The startup_script is injected as metadata if provided.
   """
-  def build_instance_config(vm_template, instance_name, startup_script \\ nil) do
+  def build_instance_config(vm_template, instance_name, opts \\ []) do
+    startup_script = Keyword.get(opts, :startup_script)
+    static_ip = Keyword.get(opts, :static_ip)
+
     config = %{
       "name" => instance_name,
       "machineType" => "zones/#{vm_template.zone}/machineTypes/#{vm_template.machine_type}",
@@ -268,7 +376,7 @@ defmodule Autoforge.Google.ComputeEngine do
         }
       ],
       "networkInterfaces" => [
-        build_network_interface(vm_template)
+        build_network_interface(vm_template, static_ip)
       ],
       "shieldedInstanceConfig" => %{
         "enableSecureBoot" => true,
@@ -277,12 +385,12 @@ defmodule Autoforge.Google.ComputeEngine do
       }
     }
 
-    config =
-      if vm_template.network_tags != [] do
-        Map.put(config, "tags", %{"items" => vm_template.network_tags})
-      else
-        config
-      end
+    # Always include http-server and https-server, plus any user-defined tags
+    all_tags =
+      (vm_template.network_tags ++ ["http-server", "https-server"])
+      |> Enum.uniq()
+
+    config = Map.put(config, "tags", %{"items" => all_tags})
 
     config =
       if vm_template.labels != %{} do
@@ -304,17 +412,20 @@ defmodule Autoforge.Google.ComputeEngine do
     end
   end
 
-  defp build_network_interface(vm_template) do
+  defp build_network_interface(vm_template, static_ip) do
     network = Map.get(vm_template, :network) || "default"
+
+    access_config = %{
+      "type" => "ONE_TO_ONE_NAT",
+      "name" => "External NAT"
+    }
+
+    access_config =
+      if static_ip, do: Map.put(access_config, "natIP", static_ip), else: access_config
 
     interface = %{
       "network" => "global/networks/#{network}",
-      "accessConfigs" => [
-        %{
-          "type" => "ONE_TO_ONE_NAT",
-          "name" => "External NAT"
-        }
-      ]
+      "accessConfigs" => [access_config]
     }
 
     case Map.get(vm_template, :subnetwork) do

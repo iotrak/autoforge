@@ -27,7 +27,16 @@ defmodule Autoforge.Deployments.VmProvisioner do
          {:ok, ts_auth_key} <- create_tailscale_auth_key(ts_config),
          startup_script <- build_startup_script(template, ts_config, ts_auth_key, vm_instance),
          instance_name <- build_instance_name(vm_instance),
-         config <- ComputeEngine.build_instance_config(template, instance_name, startup_script),
+         # Reserve a static external IP
+         _ <- broadcast_log(vm_instance, "Reserving static IP..."),
+         {:ok, static_ip} <-
+           reserve_static_ip(token, sa_config.project_id, template.region, instance_name),
+         _ <- broadcast_log(vm_instance, "Reserved static IP: #{static_ip}"),
+         config <-
+           ComputeEngine.build_instance_config(template, instance_name,
+             startup_script: startup_script,
+             static_ip: static_ip
+           ),
          _ <- broadcast_log(vm_instance, "Creating GCE instance #{instance_name}..."),
          {:ok, operation} <-
            ComputeEngine.create_instance(token, sa_config.project_id, template.zone, config),
@@ -40,11 +49,7 @@ defmodule Autoforge.Deployments.VmProvisioner do
              template.zone,
              operation_name
            ),
-         {:ok, instance_info} <-
-           ComputeEngine.get_instance(token, sa_config.project_id, template.zone, instance_name),
-         external_ip <- extract_external_ip(instance_info),
-         _ <-
-           broadcast_log(vm_instance, "Instance created. External IP: #{external_ip || "none"}"),
+         _ <- broadcast_log(vm_instance, "Instance created. External IP: #{static_ip}"),
          _ <- broadcast_log(vm_instance, "Waiting for Tailscale to connect..."),
          {:ok, ts_ip, ts_hostname} <- poll_tailscale_device(ts_config, instance_name),
          _ <- broadcast_log(vm_instance, "Tailscale connected: #{ts_ip}"),
@@ -55,7 +60,7 @@ defmodule Autoforge.Deployments.VmProvisioner do
                gce_instance_name: instance_name,
                gce_zone: template.zone,
                gce_project_id: sa_config.project_id,
-               external_ip: external_ip,
+               external_ip: static_ip,
                tailscale_ip: ts_ip,
                tailscale_hostname: ts_hostname
              },
@@ -140,6 +145,24 @@ defmodule Autoforge.Deployments.VmProvisioner do
                   vm_instance.gce_instance_name
                 )
 
+                # Release the static IP (best-effort, don't block on failure)
+                region = region_from_zone(vm_instance.gce_zone)
+
+                case ComputeEngine.release_address(
+                       token,
+                       vm_instance.gce_project_id,
+                       region,
+                       vm_instance.gce_instance_name
+                     ) do
+                  {:ok, _} ->
+                    :ok
+
+                  {:error, reason} ->
+                    Logger.warning(
+                      "Could not release static IP for #{vm_instance.gce_instance_name}: #{inspect(reason)}"
+                    )
+                end
+
               {:error, reason} ->
                 Logger.warning("Could not get token for VM cleanup: #{inspect(reason)}")
             end
@@ -154,6 +177,27 @@ defmodule Autoforge.Deployments.VmProvisioner do
   end
 
   # Private helpers
+
+  defp reserve_static_ip(token, project_id, region, address_name) do
+    with {:ok, operation} <-
+           ComputeEngine.reserve_address(token, project_id, region, address_name),
+         {:ok, _op} <-
+           ComputeEngine.wait_for_region_operation(
+             token,
+             project_id,
+             region,
+             operation["name"]
+           ),
+         {:ok, address_info} <-
+           ComputeEngine.get_address(token, project_id, region, address_name) do
+      {:ok, address_info["address"]}
+    end
+  end
+
+  # Derives the region from a zone name, e.g. "us-central1-a" -> "us-central1"
+  defp region_from_zone(zone) do
+    zone |> String.split("-") |> Enum.slice(0..-2//1) |> Enum.join("-")
+  end
 
   defp transition(vm_instance, action) do
     Ash.update(vm_instance, %{}, action: action, authorize?: false)
@@ -288,12 +332,21 @@ defmodule Autoforge.Deployments.VmProvisioner do
     systemctl daemon-reload
     systemctl restart docker
 
-    # Install Caddy
-    apt-get install -y apt-transport-https
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
-    apt-get update -y
-    apt-get install -y caddy
+    # Install Caddy (upstream binary from GitHub releases)
+    CADDY_VERSION=$(curl -fsSL https://api.github.com/repos/caddyserver/caddy/releases/latest | grep '"tag_name"' | sed 's/.*"v\\(.*\\)".*/\\1/')
+    CADDY_ARCH=$(dpkg --print-architecture)
+    curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_${CADDY_ARCH}.tar.gz" -o /tmp/caddy.tar.gz
+    tar -xzf /tmp/caddy.tar.gz -C /usr/bin caddy
+    chmod +x /usr/bin/caddy
+    rm /tmp/caddy.tar.gz
+
+    # Add Google Cloud DNS plugin
+    caddy add-package github.com/caddy-dns/googleclouddns
+
+    # Create caddy user and directories
+    groupadd --system caddy 2>/dev/null || true
+    useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy 2>/dev/null || true
+    mkdir -p /etc/caddy
 
     # Configure Caddy admin API to listen on all interfaces
     cat > /etc/caddy/Caddyfile << 'CADDY_EOF'
@@ -301,7 +354,34 @@ defmodule Autoforge.Deployments.VmProvisioner do
       admin 0.0.0.0:2019
     }
     CADDY_EOF
-    systemctl restart caddy
+    chown caddy:caddy /etc/caddy/Caddyfile
+
+    # Install systemd service
+    cat > /etc/systemd/system/caddy.service << 'SYSTEMD_EOF'
+    [Unit]
+    Description=Caddy
+    Documentation=https://caddyserver.com/docs/
+    After=network.target network-online.target
+    Requires=network-online.target
+
+    [Service]
+    Type=notify
+    User=caddy
+    Group=caddy
+    ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
+    ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile --force
+    TimeoutStopSec=5s
+    LimitNOFILE=1048576
+    PrivateTmp=true
+    ProtectSystem=full
+    AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+
+    [Install]
+    WantedBy=multi-user.target
+    SYSTEMD_EOF
+
+    systemctl daemon-reload
+    systemctl enable --now caddy
 
     # Install Tailscale
     curl -fsSL https://tailscale.com/install.sh | sh
@@ -314,16 +394,6 @@ defmodule Autoforge.Deployments.VmProvisioner do
       base_script <> "\n# User startup script\n" <> user_script
     else
       base_script
-    end
-  end
-
-  defp extract_external_ip(instance_info) do
-    case instance_info do
-      %{"networkInterfaces" => [%{"accessConfigs" => [%{"natIP" => ip} | _]} | _]} ->
-        ip
-
-      _ ->
-        nil
     end
   end
 

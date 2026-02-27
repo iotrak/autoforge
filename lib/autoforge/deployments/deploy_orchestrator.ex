@@ -41,6 +41,8 @@ defmodule Autoforge.Deployments.DeployOrchestrator do
          {:ok, network_id} <-
            RemoteDocker.create_network(ip, "autoforge-deploy-#{deployment.id}"),
          db_alias <- "db-#{deployment.id}",
+         _ <- broadcast_log(deployment, "Creating database volume..."),
+         {:ok, _} <- RemoteDocker.create_volume(ip, db_volume_name(deployment)),
          db_config <- build_db_container_config(deployment, network_id, db_alias),
          _ <- broadcast_log(deployment, "Starting database..."),
          {:ok, db_container_id} <-
@@ -124,6 +126,8 @@ defmodule Autoforge.Deployments.DeployOrchestrator do
         RemoteDocker.remove_container(ip, deployment.db_container_id)
       end
 
+      RemoteDocker.remove_volume(ip, db_volume_name(deployment))
+
       if deployment.network_id do
         RemoteDocker.remove_network(ip, deployment.network_id)
       end
@@ -152,20 +156,64 @@ defmodule Autoforge.Deployments.DeployOrchestrator do
 
   defp db_image, do: "postgres:17-alpine"
 
+  defp db_volume_name(deployment), do: "autoforge-deploy-db-#{deployment.id}"
+
   defp build_db_container_config(deployment, network_id, db_alias) do
     %{
       "Image" => db_image(),
       "Env" => [
         "POSTGRES_DB=#{deployment.db_name}",
         "POSTGRES_USER=postgres",
-        "POSTGRES_PASSWORD=#{deployment.db_password}"
+        "POSTGRES_PASSWORD=#{deployment.db_password}",
+        "POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C"
       ],
+      "Cmd" => [
+        "postgres",
+        "-c",
+        "shared_buffers=128MB",
+        "-c",
+        "work_mem=8MB",
+        "-c",
+        "maintenance_work_mem=64MB",
+        "-c",
+        "effective_cache_size=256MB",
+        "-c",
+        "wal_buffers=4MB",
+        "-c",
+        "max_connections=100",
+        "-c",
+        "random_page_cost=1.1",
+        "-c",
+        "effective_io_concurrency=200",
+        "-c",
+        "log_min_duration_statement=1000",
+        "-c",
+        "log_statement=ddl",
+        "-c",
+        "log_connections=on",
+        "-c",
+        "log_disconnections=on"
+      ],
+      "Healthcheck" => %{
+        "Test" => ["CMD-SHELL", "pg_isready -U postgres"],
+        "Interval" => 10_000_000_000,
+        "Timeout" => 5_000_000_000,
+        "Retries" => 5,
+        "StartPeriod" => 30_000_000_000
+      },
       "Labels" => %{
         "autoforge.deployment_id" => deployment.id
       },
       "HostConfig" => %{
         "NetworkMode" => network_id,
-        "RestartPolicy" => %{"Name" => "unless-stopped"}
+        "RestartPolicy" => %{"Name" => "unless-stopped"},
+        "Binds" => ["#{db_volume_name(deployment)}:/var/lib/postgresql/data"],
+        "Memory" => 536_870_912,
+        "MemorySwap" => 536_870_912,
+        "LogConfig" => %{
+          "Type" => "journald",
+          "Config" => %{}
+        }
       },
       "NetworkingConfig" => %{
         "EndpointsConfig" => %{
@@ -192,7 +240,11 @@ defmodule Autoforge.Deployments.DeployOrchestrator do
             %{"HostPort" => to_string(external_port)}
           ]
         },
-        "RestartPolicy" => %{"Name" => "unless-stopped"}
+        "RestartPolicy" => %{"Name" => "unless-stopped"},
+        "LogConfig" => %{
+          "Type" => "journald",
+          "Config" => %{}
+        }
       }
     }
   end

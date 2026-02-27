@@ -160,6 +160,29 @@ defmodule Autoforge.Deployments.RemoteDocker do
   end
 
   @doc """
+  Creates a named Docker volume on the remote host.
+  """
+  def create_volume(ip, name) do
+    case docker_req(ip, :post, "/volumes/create", json: %{"Name" => name}) do
+      {:ok, %{status: 201, body: body}} -> {:ok, body}
+      {:ok, %{body: body}} -> {:error, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Removes a named Docker volume on the remote host.
+  """
+  def remove_volume(ip, name) do
+    case docker_req(ip, :delete, "/volumes/#{name}") do
+      {:ok, %{status: 204}} -> :ok
+      {:ok, %{status: 404}} -> :ok
+      {:ok, %{body: body}} -> {:error, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Removes a Docker network on the remote host.
   """
   def remove_network(ip, name) do

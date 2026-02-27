@@ -318,7 +318,8 @@ defmodule Autoforge.Deployments.VmProvisioner do
     mkdir -p /etc/docker
     cat > /etc/docker/daemon.json << 'DOCKER_EOF'
     {
-      "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2375"]
+      "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2375"],
+      "log-driver": "journald"
     }
     DOCKER_EOF
 
@@ -386,6 +387,11 @@ defmodule Autoforge.Deployments.VmProvisioner do
     # Install Tailscale
     curl -fsSL https://tailscale.com/install.sh | sh
     tailscale up --auth-key=#{ts_auth_key} --hostname=#{hostname} --advertise-tags=#{ts_config.tag}
+
+    # Install Google Ops Agent for Cloud Logging and Monitoring
+    curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+    bash add-google-cloud-ops-agent-repo.sh --also-install
+    rm add-google-cloud-ops-agent-repo.sh
     """
 
     user_script = template.startup_script

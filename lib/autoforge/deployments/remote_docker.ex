@@ -279,6 +279,50 @@ defmodule Autoforge.Deployments.RemoteDocker do
     end
   end
 
+  @doc """
+  Prunes unused images on the remote host.
+
+  Options:
+    * `:dangling` - only prune dangling images (default: true)
+  """
+  def prune_images(ip, opts \\ []) do
+    dangling = Keyword.get(opts, :dangling, true)
+    filters = if dangling, do: %{"dangling" => ["true"]}, else: %{}
+
+    params = if filters != %{}, do: [filters: Jason.encode!(filters)], else: []
+
+    case docker_req(ip, :post, "/images/prune", params: params) do
+      {:ok, %{status: 200, body: body}} -> {:ok, body}
+      {:ok, %{body: body}} -> {:error, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Prunes stopped containers on the remote host.
+  """
+  def prune_containers(ip, opts \\ []) do
+    filters = Keyword.get(opts, :filters, %{})
+    params = if filters != %{}, do: [filters: Jason.encode!(filters)], else: []
+
+    case docker_req(ip, :post, "/containers/prune", params: params) do
+      {:ok, %{status: 200, body: body}} -> {:ok, body}
+      {:ok, %{body: body}} -> {:error, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Returns Docker system disk usage information on the remote host.
+  """
+  def system_df(ip) do
+    case docker_req(ip, :get, "/system/df") do
+      {:ok, %{status: 200, body: body}} -> {:ok, body}
+      {:ok, %{body: body}} -> {:error, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp stream_build_output(body, callback) when is_binary(body) do
     body
     |> String.split("\n", trim: true)

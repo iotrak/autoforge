@@ -4,7 +4,7 @@ defmodule Autoforge.Deployments.VmInstance do
     domain: Autoforge.Deployments,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
-    extensions: [AshStateMachine, AshPaperTrail.Resource],
+    extensions: [AshStateMachine, AshCloak, AshPaperTrail.Resource],
     notifiers: [Ash.Notifier.PubSub]
 
   postgres do
@@ -31,11 +31,18 @@ defmodule Autoforge.Deployments.VmInstance do
     end
   end
 
+  cloak do
+    vault(Autoforge.Vault)
+    attributes([:ssh_private_key])
+    decrypt_by_default([:ssh_private_key])
+  end
+
   paper_trail do
     primary_key_type :uuid_v7
     change_tracking_mode :changes_only
     store_action_name? true
     reference_source? false
+    sensitive_attributes :redact
     ignore_attributes [:inserted_at, :updated_at]
     belongs_to_actor :user, Autoforge.Accounts.User, domain: Autoforge.Accounts
   end
@@ -82,6 +89,11 @@ defmodule Autoforge.Deployments.VmInstance do
 
       require_atomic? false
       change transition_state(:running)
+    end
+
+    update :set_ssh_key do
+      accept [:ssh_private_key]
+      require_atomic? false
     end
 
     update :mark_error do
@@ -170,6 +182,11 @@ defmodule Autoforge.Deployments.VmInstance do
       public? true
     end
 
+    attribute :ssh_private_key, :string do
+      allow_nil? true
+      public? true
+    end
+
     attribute :error_message, :string do
       allow_nil? true
       public? true
@@ -184,5 +201,7 @@ defmodule Autoforge.Deployments.VmInstance do
       allow_nil? false
       attribute_writable? true
     end
+
+    has_many :management_ops, Autoforge.Deployments.VmManagementOp
   end
 end

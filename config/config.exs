@@ -21,7 +21,8 @@ config :autoforge, Oban,
     {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
     {Oban.Plugins.Cron,
      crontab: [
-       {"*/5 * * * *", Autoforge.Projects.Workers.CleanupWorker}
+       {"*/5 * * * *", Autoforge.Projects.Workers.CleanupWorker},
+       {"0 3 * * *", Autoforge.Deployments.Workers.VmMaintenanceWorker}
      ]}
   ]
 

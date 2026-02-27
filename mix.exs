@@ -23,7 +23,7 @@ defmodule Autoforge.MixProject do
   def application do
     [
       mod: {Autoforge.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :ssh, :public_key]
     ]
   end
 

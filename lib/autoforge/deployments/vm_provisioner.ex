@@ -25,7 +25,14 @@ defmodule Autoforge.Deployments.VmProvisioner do
          {:ok, token} <- Auth.get_access_token(sa_config, ComputeEngine.scopes()),
          {:ok, ts_config} <- get_tailscale_config(),
          {:ok, ts_auth_key} <- create_tailscale_auth_key(ts_config),
-         startup_script <- build_startup_script(template, ts_config, ts_auth_key, vm_instance),
+         {ssh_public_key, ssh_private_pem} <- generate_ssh_keypair(),
+         {:ok, vm_instance} <-
+           Ash.update(vm_instance, %{ssh_private_key: ssh_private_pem},
+             action: :set_ssh_key,
+             authorize?: false
+           ),
+         startup_script <-
+           build_startup_script(template, ts_config, ts_auth_key, vm_instance, ssh_public_key),
          instance_name <- build_instance_name(vm_instance),
          # Reserve a static external IP
          _ <- broadcast_log(vm_instance, "Reserving static IP..."),
@@ -294,7 +301,7 @@ defmodule Autoforge.Deployments.VmProvisioner do
     "autoforge-vm-#{slug}-#{short_id}"
   end
 
-  defp build_startup_script(template, ts_config, ts_auth_key, vm_instance) do
+  defp build_startup_script(template, ts_config, ts_auth_key, vm_instance, ssh_public_key) do
     hostname = build_instance_name(vm_instance)
 
     base_script = """
@@ -392,6 +399,19 @@ defmodule Autoforge.Deployments.VmProvisioner do
     curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
     bash add-google-cloud-ops-agent-repo.sh --also-install
     rm add-google-cloud-ops-agent-repo.sh
+
+    # Create autoforge service user with SSH access
+    useradd -m -s /bin/bash autoforge
+    echo "autoforge ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/autoforge
+    mkdir -p /home/autoforge/.ssh
+    echo "#{ssh_public_key}" > /home/autoforge/.ssh/authorized_keys
+    chmod 700 /home/autoforge/.ssh
+    chmod 600 /home/autoforge/.ssh/authorized_keys
+    chown -R autoforge:autoforge /home/autoforge/.ssh
+
+    # Harden SSH
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+    systemctl restart sshd
     """
 
     user_script = template.startup_script
@@ -401,6 +421,89 @@ defmodule Autoforge.Deployments.VmProvisioner do
     else
       base_script
     end
+  end
+
+  defp generate_ssh_keypair do
+    {pub_raw, priv_raw} = :crypto.generate_key(:eddsa, :ed25519)
+
+    # Build OpenSSH public key format
+    type = "ssh-ed25519"
+    type_bytes = <<byte_size(type)::32-big>> <> type
+    key_bytes = <<byte_size(pub_raw)::32-big>> <> pub_raw
+    pub_blob = type_bytes <> key_bytes
+    public_key = "ssh-ed25519 " <> Base.encode64(pub_blob) <> " autoforge@managed"
+
+    # Build OpenSSH private key PEM format
+    private_pem = encode_openssh_private_key(pub_raw, priv_raw)
+
+    {public_key, private_pem}
+  end
+
+  defp encode_openssh_private_key(pub_raw, priv_raw) do
+    check = :crypto.strong_rand_bytes(4)
+    type_str = "ssh-ed25519"
+
+    # Private section
+    priv_section =
+      IO.iodata_to_binary([
+        check,
+        check,
+        <<byte_size(type_str)::32-big>>,
+        type_str,
+        <<byte_size(pub_raw)::32-big>>,
+        pub_raw,
+        <<byte_size(priv_raw) + byte_size(pub_raw)::32-big>>,
+        priv_raw,
+        pub_raw,
+        # Empty comment
+        <<0::32-big>>
+      ])
+
+    # Pad to 8-byte block boundary
+    pad_len = rem(8 - rem(byte_size(priv_section), 8), 8)
+
+    priv_section =
+      if pad_len > 0 do
+        padding = for i <- 1..pad_len, into: <<>>, do: <<rem(i, 256)::8>>
+        priv_section <> padding
+      else
+        priv_section
+      end
+
+    # Public key blob
+    pub_blob =
+      <<byte_size(type_str)::32-big>> <>
+        type_str <>
+        <<byte_size(pub_raw)::32-big>> <> pub_raw
+
+    # Full key
+    cipher = "none"
+    kdf = "none"
+    kdf_options = ""
+
+    full =
+      IO.iodata_to_binary([
+        "openssh-key-v1\0",
+        <<byte_size(cipher)::32-big>>,
+        cipher,
+        <<byte_size(kdf)::32-big>>,
+        kdf,
+        <<byte_size(kdf_options)::32-big>>,
+        kdf_options,
+        <<1::32-big>>,
+        <<byte_size(pub_blob)::32-big>>,
+        pub_blob,
+        <<byte_size(priv_section)::32-big>>,
+        priv_section
+      ])
+
+    b64 =
+      Base.encode64(full)
+      |> String.graphemes()
+      |> Enum.chunk_every(70)
+      |> Enum.map_join("\n", &Enum.join/1)
+
+    "-----BEGIN OPENSSH PRIVATE KEY-----\n#{b64}\n-----END OPENSSH PRIVATE KEY-----\n"
   end
 
   defp poll_tailscale_device(ts_config, instance_name) do

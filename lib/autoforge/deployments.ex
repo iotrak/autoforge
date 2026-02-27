@@ -14,5 +14,6 @@ defmodule Autoforge.Deployments do
     resource Autoforge.Deployments.VmInstance
     resource Autoforge.Deployments.Deployment
     resource Autoforge.Deployments.DeploymentEnvVar
+    resource Autoforge.Deployments.VmManagementOp
   end
 end

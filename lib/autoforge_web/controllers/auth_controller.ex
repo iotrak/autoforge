@@ -22,6 +22,12 @@ defmodule AutoforgeWeb.AuthController do
   end
 
   def failure(conn, activity, reason) do
+    require Logger
+
+    Logger.error(
+      "Authentication failure: activity=#{inspect(activity)} reason=#{inspect(reason)}"
+    )
+
     message =
       case {activity, reason} do
         {_,

@@ -71,6 +71,9 @@ defmodule AutoforgeWeb.Router do
       live "/vm-instances", VmInstancesLive
       live "/vm-instances/new", VmInstanceFormLive
       live "/vm-instances/:id", VmInstanceLive
+      live "/deployments", DeploymentsLive
+      live "/deployments/new", DeploymentFormLive
+      live "/deployments/:id", DeploymentLive
     end
   end
 

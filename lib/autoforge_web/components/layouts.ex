@@ -109,6 +109,12 @@ defmodule AutoforgeWeb.Layouts do
           <div class="w-6 border-t border-base-300 my-1" />
 
           <.sidebar_nav_item
+            icon="hero-rocket-launch"
+            label="Deploys"
+            href={~p"/deployments"}
+            active={@active_page == :deployments}
+          />
+          <.sidebar_nav_item
             icon="hero-server"
             label="VMs"
             href={~p"/vm-instances"}

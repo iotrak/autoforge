@@ -8,5 +8,7 @@ defmodule Autoforge.Deployments do
   resources do
     resource Autoforge.Deployments.VmTemplate
     resource Autoforge.Deployments.VmInstance
+    resource Autoforge.Deployments.Deployment
+    resource Autoforge.Deployments.DeploymentEnvVar
   end
 end

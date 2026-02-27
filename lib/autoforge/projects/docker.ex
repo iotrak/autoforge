@@ -128,6 +128,23 @@ defmodule Autoforge.Projects.Docker do
   end
 
   @doc """
+  Downloads a tar archive of a container path.
+
+  Returns `{:ok, tar_binary}` or `{:error, reason}`.
+  """
+  def get_archive(container_id, path) do
+    case docker_req(:get, "/containers/#{container_id}/archive",
+           params: [path: path],
+           raw: true,
+           receive_timeout: 300_000
+         ) do
+      {:ok, %{status: 200, body: body}} -> {:ok, body}
+      {:ok, %{body: body}} -> {:error, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Uploads a tar archive to a container at the given path.
   """
   def put_archive(container_id, path, tar_binary) do

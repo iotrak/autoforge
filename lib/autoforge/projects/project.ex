@@ -125,6 +125,7 @@ defmodule Autoforge.Projects.Project do
     end
 
     update :start do
+      accept [:tailscale_container_id, :tailscale_hostname]
       require_atomic? false
       change transition_state(:running)
     end

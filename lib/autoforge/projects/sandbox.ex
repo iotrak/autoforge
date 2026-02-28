@@ -119,11 +119,20 @@ defmodule Autoforge.Projects.Sandbox do
 
     with :ok <- Docker.start_container(project.db_container_id),
          :ok <- Docker.start_container(project.container_id),
-         :ok <- maybe_start_tailscale(project),
+         {ts_container_id, ts_hostname} <- recreate_tailscale_sidecar(project),
          :ok <- create_sandbox_user(project.container_id),
          :ok <- run_startup_script(project.container_id, project, variables),
          _ <- sync_project_files(project),
-         {:ok, project} <- Ash.update(project, %{}, action: :start, authorize?: false) do
+         {:ok, project} <-
+           Ash.update(
+             project,
+             %{
+               tailscale_container_id: ts_container_id,
+               tailscale_hostname: ts_hostname
+             },
+             action: :start,
+             authorize?: false
+           ) do
       {:ok, project}
     else
       {:error, reason} ->
@@ -585,11 +594,21 @@ defmodule Autoforge.Projects.Sandbox do
     end
   end
 
-  defp maybe_start_tailscale(%{tailscale_container_id: id}) when is_binary(id) do
-    Docker.start_container(id)
-  end
+  defp recreate_tailscale_sidecar(project) do
+    Tailscale.remove_sidecar(project)
 
-  defp maybe_start_tailscale(_), do: :ok
+    case Tailscale.create_sidecar(project, project.container_id) do
+      {:ok, container_id, hostname} ->
+        {container_id, hostname}
+
+      :disabled ->
+        {nil, nil}
+
+      {:error, reason} ->
+        Logger.warning("Tailscale sidecar recreation failed: #{inspect(reason)}")
+        {nil, nil}
+    end
+  end
 
   defp maybe_stop_tailscale(%{tailscale_container_id: id}) when is_binary(id) do
     Docker.stop_container(id)

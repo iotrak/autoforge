@@ -77,7 +77,6 @@ defmodule Autoforge.Projects.Tailscale do
                ),
              :ok <- upload_serve_config(container_id),
              :ok <- Docker.start_container(container_id) do
-          warm_up_cert(container_id, hostname, config.tailnet_name)
           {:ok, container_id, hostname}
         else
           {:error, reason} ->
@@ -123,7 +122,6 @@ defmodule Autoforge.Projects.Tailscale do
              :ok <- upload_serve_config(container_id),
              :ok <- Docker.start_container(container_id),
              :ok <- wait_for_tailscale(container_id) do
-          warm_up_cert(container_id, hostname, config.tailnet_name)
           {:ok, container_id, hostname}
         else
           {:error, reason} ->
@@ -249,42 +247,6 @@ defmodule Autoforge.Projects.Tailscale do
     end
   end
 
-  @cert_warmup_attempts 10
-  @cert_warmup_delay_ms 2_000
-
-  defp warm_up_cert(container_id, hostname, tailnet_name) do
-    fqdn = "#{hostname}.#{tailnet_name}"
-    do_warm_up_cert(container_id, fqdn, 1)
-  end
-
-  defp do_warm_up_cert(_container_id, fqdn, attempt) when attempt > @cert_warmup_attempts do
-    Logger.warning(
-      "Failed to provision TLS cert for #{fqdn} after #{@cert_warmup_attempts} attempts"
-    )
-  end
-
-  defp do_warm_up_cert(container_id, fqdn, attempt) do
-    case Docker.exec_run(container_id, [
-           "tailscale",
-           "--socket=/tmp/tailscaled.sock",
-           "cert",
-           fqdn
-         ]) do
-      {:ok, %{exit_code: 0}} ->
-        Logger.info("TLS cert provisioned for #{fqdn}")
-
-      {:ok, %{exit_code: _code, output: output}} ->
-        Logger.debug("Cert warmup attempt #{attempt} for #{fqdn}: #{output}")
-        Process.sleep(@cert_warmup_delay_ms)
-        do_warm_up_cert(container_id, fqdn, attempt + 1)
-
-      {:error, reason} ->
-        Logger.debug("Cert warmup attempt #{attempt} for #{fqdn}: #{inspect(reason)}")
-        Process.sleep(@cert_warmup_delay_ms)
-        do_warm_up_cert(container_id, fqdn, attempt + 1)
-    end
-  end
-
   defp find_device_by_hostname(access_token, hostname) do
     case Req.get("https://api.tailscale.com/api/v2/tailnet/-/devices",
            auth: {:bearer, access_token}
@@ -371,6 +333,8 @@ defmodule Autoforge.Projects.Tailscale do
          app_container_id,
          project
        ) do
+    fqdn = "#{hostname}.#{config.tailnet_name}"
+
     env = [
       "TS_HOSTNAME=#{hostname}",
       "TS_STATE_DIR=/var/lib/tailscale",
@@ -384,6 +348,22 @@ defmodule Autoforge.Projects.Tailscale do
     container_config = %{
       "Image" => "tailscale/tailscale:latest",
       "Env" => env,
+      "Healthcheck" => %{
+        "Test" => [
+          "CMD",
+          "tailscale",
+          "--socket=/tmp/tailscaled.sock",
+          "cert",
+          fqdn
+        ],
+        # 10 second interval
+        "Interval" => 10_000_000_000,
+        # 30 second timeout for cert provisioning
+        "Timeout" => 30_000_000_000,
+        # Wait 5 seconds before first check
+        "StartPeriod" => 5_000_000_000,
+        "Retries" => 3
+      },
       "HostConfig" => %{
         "NetworkMode" => "container:#{app_container_id}",
         "Binds" => ["#{volume_name}:/var/lib/tailscale"],
